@@ -83,7 +83,7 @@ export default function HomeScreen({ navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🎬</Text>
-            <Text style={styles.emptyTitle}>No scripts yet Hello</Text>
+            <Text style={styles.emptyTitle}>No scripts yet</Text>
             <Text style={styles.emptySubtitle}>Tap the button below to create your first script</Text>
           </View>
         }
