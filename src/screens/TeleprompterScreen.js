@@ -156,16 +156,25 @@ export default function TeleprompterScreen({ navigation, route }) {
       {/* Teleprompter */}
       <TouchableOpacity
         activeOpacity={1}
-        style={[styles.prompterSection, { backgroundColor: settings.backgroundColor }]}
+        style={[
+          styles.prompterSection,
+          { backgroundColor: settings.backgroundColor },
+        ]}
         onPress={resetControlsTimer}
       >
         <ScrollView
           ref={scrollRef}
           scrollEnabled={playState !== 'playing'}
           showsVerticalScrollIndicator={false}
-          onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
-          onContentSizeChange={(_, h) => { contentHeight.current = h; }}
-          onLayout={e => { scrollViewHeight.current = e.nativeEvent.layout.height; }}
+          onScroll={e => {
+            scrollY.current = e.nativeEvent.contentOffset.y;
+          }}
+          onContentSizeChange={(_, h) => {
+            contentHeight.current = h;
+          }}
+          onLayout={e => {
+            scrollViewHeight.current = e.nativeEvent.layout.height;
+          }}
           scrollEventThrottle={16}
           contentContainerStyle={styles.prompterContent}
         >
@@ -174,7 +183,7 @@ export default function TeleprompterScreen({ navigation, route }) {
               styles.scriptText,
               {
                 fontSize: settings.fontSize,
-                color: '#ffffff',
+                color: settings.fontColor,
                 textAlign: settings.textAlign,
                 writingDirection: isRTL ? 'rtl' : 'ltr',
                 transform: settings.mirrorText ? [{ scaleX: -1 }] : [],
@@ -193,10 +202,12 @@ export default function TeleprompterScreen({ navigation, route }) {
       {/* Controls Overlay (auto-hides) */}
       {showControls && (
         <View style={styles.controlsOverlay} pointerEvents="box-none">
-
           {/* Top bar */}
           <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => navigation.goBack()}>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => navigation.goBack()}
+            >
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
             <Text style={styles.scriptTitle} numberOfLines={1}>
@@ -206,16 +217,23 @@ export default function TeleprompterScreen({ navigation, route }) {
           </View>
 
           {/* Bottom control bar */}
-          <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 14 }]}>
+          <View
+            style={[
+              styles.bottomControls,
+              { paddingBottom: insets.bottom + 14 },
+            ]}
+          >
             <View style={styles.playbackRow}>
-
               {/* Reset */}
               <TouchableOpacity style={styles.sideBtn} onPress={handleReset}>
                 <Text style={styles.sideBtnText}>↺</Text>
               </TouchableOpacity>
 
               {/* Play / Pause */}
-              <TouchableOpacity style={styles.playBtn} onPress={handlePlayPause}>
+              <TouchableOpacity
+                style={styles.playBtn}
+                onPress={handlePlayPause}
+              >
                 <Text style={styles.playBtnText}>{getPlayIcon()}</Text>
               </TouchableOpacity>
 
@@ -226,10 +244,8 @@ export default function TeleprompterScreen({ navigation, route }) {
               >
                 <Text style={styles.sideBtnText}>⚙️</Text>
               </TouchableOpacity>
-
             </View>
           </View>
-
         </View>
       )}
     </View>
