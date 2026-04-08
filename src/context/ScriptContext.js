@@ -5,23 +5,24 @@ const ScriptContext = createContext(null);
 
 const SCRIPTS_KEY = '@camprompter_scripts';
 const SETTINGS_KEY = '@camprompter_settings';
+const RECORDINGS_KEY = '@camprompter_recordings';
 
 const defaultSettings = {
-  scrollSpeed: 50,       // pixels per second
+  scrollSpeed: 50,
   fontSize: 28,
   fontColor: '#ffffff',
   backgroundColor: '#000000',
-  textAlign: 'center',   // 'left' | 'center' | 'right'
+  textAlign: 'center',
   mirrorText: false,
-  cameraPosition: 'front', // 'front' | 'back'
-  cameraRatio: 0.5,      // top section height as fraction of screen (0.3 - 0.7)
+  cameraPosition: 'front',
+  cameraRatio: 0.5,
 };
 
 export function ScriptProvider({ children }) {
   const [scripts, setScripts] = useState([]);
   const [settings, setSettings] = useState(defaultSettings);
+  const [recordings, setRecordings] = useState([]);
 
-  // Load saved data when app starts
   useEffect(() => {
     loadData();
   }, []);
@@ -30,8 +31,10 @@ export function ScriptProvider({ children }) {
     try {
       const savedScripts = await AsyncStorage.getItem(SCRIPTS_KEY);
       const savedSettings = await AsyncStorage.getItem(SETTINGS_KEY);
+      const savedRecordings = await AsyncStorage.getItem(RECORDINGS_KEY);
       if (savedScripts) setScripts(JSON.parse(savedScripts));
       if (savedSettings) setSettings({ ...defaultSettings, ...JSON.parse(savedSettings) });
+      if (savedRecordings) setRecordings(JSON.parse(savedRecordings));
     } catch (e) {
       console.error('Failed to load data:', e);
     }
@@ -78,9 +81,42 @@ export function ScriptProvider({ children }) {
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
   }
 
+  // ── Recordings ─────────────────────────────────────────────────────────────
+  async function addRecording(data) {
+    const newRecording = {
+      id: Date.now().toString(),
+      path: data.path,
+      duration: data.duration ?? 0,       // seconds
+      scriptTitle: data.scriptTitle ?? 'Untitled',
+      createdAt: Date.now(),
+    };
+    const updated = [newRecording, ...recordings];
+    setRecordings(updated);
+    await AsyncStorage.setItem(RECORDINGS_KEY, JSON.stringify(updated));
+    return newRecording;
+  }
+
+  async function deleteRecording(id) {
+    const updated = recordings.filter(r => r.id !== id);
+    setRecordings(updated);
+    await AsyncStorage.setItem(RECORDINGS_KEY, JSON.stringify(updated));
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   return (
     <ScriptContext.Provider
-      value={{ scripts, settings, addScript, updateScript, deleteScript, getScript, updateSettings }}
+      value={{
+        scripts,
+        settings,
+        recordings,
+        addScript,
+        updateScript,
+        deleteScript,
+        getScript,
+        updateSettings,
+        addRecording,
+        deleteRecording,
+      }}
     >
       {children}
     </ScriptContext.Provider>

@@ -7,18 +7,19 @@ import {
   ScrollView,
   Dimensions,
   StatusBar,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScripts } from '../context/ScriptContext';
 import CameraView from '../components/CameraView';
+import {
+  useCameraPermission,
+  useMicrophonePermission,
+} from 'react-native-vision-camera';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Play states: 'idle' | 'playing' | 'paused' | 'finished'
-
 export default function TeleprompterScreen({ navigation, route }) {
-  const { getScript, settings } = useScripts();
+  const { getScript, settings, addRecording } = useScripts(); // ← addRecording added
   const script = getScript(route.params.scriptId);
   const insets = useSafeAreaInsets();
 
@@ -26,6 +27,29 @@ export default function TeleprompterScreen({ navigation, route }) {
   const [showControls, setShowControls] = useState(true);
   const [currentSpeed] = useState(settings.scrollSpeed);
   const [isRecording, setIsRecording] = useState(false);
+  const [cameraPosition, setCameraPosition] = useState(settings.cameraPosition);
+
+  // ── Permissions ────────────────────────────────────────────────────────────
+  const {
+    hasPermission: hasCameraPermission,
+    requestPermission: requestCameraPermission,
+  } = useCameraPermission();
+
+  const {
+    hasPermission: hasMicPermission,
+    requestPermission: requestMicPermission,
+  } = useMicrophonePermission();
+
+  const hasAllPermissions = hasCameraPermission && hasMicPermission;
+
+  useEffect(() => {
+    async function requestPermissions() {
+      if (!hasCameraPermission) await requestCameraPermission();
+      if (!hasMicPermission) await requestMicPermission();
+    }
+    requestPermissions();
+  }, []);
+  // ──────────────────────────────────────────────────────────────────────────
 
   const scrollRef = useRef(null);
   const scrollY = useRef(0);
@@ -89,28 +113,38 @@ export default function TeleprompterScreen({ navigation, route }) {
     return stopScrollLoop;
   }, [playState, startScrollLoop]);
 
-  function handlePlayPause() {
+  // ── Combined play + record button ─────────────────────────────────────────
+  function handleMainButton() {
     if (playState === 'idle' || playState === 'paused') {
       setPlayState('playing');
+      if (!isRecording) setIsRecording(true);
     } else if (playState === 'playing') {
       setPlayState('paused');
+      if (isRecording) setIsRecording(false);
     } else if (playState === 'finished') {
       scrollY.current = 0;
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       setPlayState('playing');
+      if (!isRecording) setIsRecording(true);
     }
     resetControlsTimer();
   }
+  // ──────────────────────────────────────────────────────────────────────────
 
   function handleReset() {
     stopScrollLoop();
     scrollY.current = 0;
     scrollRef.current?.scrollTo({ y: 0, animated: true });
     setPlayState('idle');
+    setIsRecording(false);
     setShowControls(true);
   }
 
-  function getPlayIcon() {
+  function handleFlipCamera() {
+    setCameraPosition(prev => (prev === 'front' ? 'back' : 'front'));
+  }
+
+  function getMainButtonIcon() {
     if (playState === 'playing') return '⏸';
     if (playState === 'finished') return '↺';
     return '▶';
@@ -127,6 +161,33 @@ export default function TeleprompterScreen({ navigation, route }) {
     );
   }
 
+  if (!hasAllPermissions) {
+    return (
+      <View style={styles.permissionContainer}>
+        <Text style={styles.permissionTitle}>Permissions Required</Text>
+        <Text style={styles.permissionMessage}>
+          Camera and microphone access are needed to use the teleprompter with
+          recording. Please grant both permissions to continue.
+        </Text>
+        <TouchableOpacity
+          style={styles.permissionBtn}
+          onPress={async () => {
+            if (!hasCameraPermission) await requestCameraPermission();
+            if (!hasMicPermission) await requestMicPermission();
+          }}
+        >
+          <Text style={styles.permissionBtnText}>Grant Permissions</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.permissionSkipBtn}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.permissionSkipText}>← Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const isRTL = ['ar', 'ur'].includes(script.language);
 
   return (
@@ -137,15 +198,21 @@ export default function TeleprompterScreen({ navigation, route }) {
       <View style={[styles.cameraSection, { height: cameraHeight }]}>
         <CameraView
           height={cameraHeight}
-          cameraPosition={settings.cameraPosition}
+          cameraPosition={cameraPosition}
           isRecording={isRecording}
+          onRecordingStart={() => setIsRecording(true)}
+          onRecordingStop={async (video, err) => {   // ← updated callback
+            setIsRecording(false);
+            if (video) {
+              await addRecording({
+                path: video.path,
+                duration: video.duration ?? 0,
+                scriptTitle: script.title,
+              });
+              console.log('Recording saved:', video.path);
+            }
+          }}
         />
-        {isRecording && (
-          <View style={styles.recordingBadge}>
-            <View style={styles.recDot} />
-            <Text style={styles.recText}>REC</Text>
-          </View>
-        )}
       </View>
 
       {/* Divider */}
@@ -156,25 +223,16 @@ export default function TeleprompterScreen({ navigation, route }) {
       {/* Teleprompter */}
       <TouchableOpacity
         activeOpacity={1}
-        style={[
-          styles.prompterSection,
-          { backgroundColor: settings.backgroundColor },
-        ]}
+        style={[styles.prompterSection, { backgroundColor: settings.backgroundColor }]}
         onPress={resetControlsTimer}
       >
         <ScrollView
           ref={scrollRef}
           scrollEnabled={playState !== 'playing'}
           showsVerticalScrollIndicator={false}
-          onScroll={e => {
-            scrollY.current = e.nativeEvent.contentOffset.y;
-          }}
-          onContentSizeChange={(_, h) => {
-            contentHeight.current = h;
-          }}
-          onLayout={e => {
-            scrollViewHeight.current = e.nativeEvent.layout.height;
-          }}
+          onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+          onContentSizeChange={(_, h) => { contentHeight.current = h; }}
+          onLayout={e => { scrollViewHeight.current = e.nativeEvent.layout.height; }}
           scrollEventThrottle={16}
           contentContainerStyle={styles.prompterContent}
         >
@@ -193,15 +251,14 @@ export default function TeleprompterScreen({ navigation, route }) {
           >
             {script.content}
           </Text>
-
-          {/* Bottom spacer so text doesn't end right at the control bar */}
           <View style={{ height: 120 }} />
         </ScrollView>
       </TouchableOpacity>
 
-      {/* Controls Overlay (auto-hides) */}
+      {/* Controls Overlay */}
       {showControls && (
         <View style={styles.controlsOverlay} pointerEvents="box-none">
+
           {/* Top bar */}
           <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
             <TouchableOpacity
@@ -217,33 +274,28 @@ export default function TeleprompterScreen({ navigation, route }) {
           </View>
 
           {/* Bottom control bar */}
-          <View
-            style={[
-              styles.bottomControls,
-              { paddingBottom: insets.bottom + 14 },
-            ]}
-          >
+          <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 14 }]}>
             <View style={styles.playbackRow}>
+
               {/* Reset */}
               <TouchableOpacity style={styles.sideBtn} onPress={handleReset}>
                 <Text style={styles.sideBtnText}>↺</Text>
               </TouchableOpacity>
 
-              {/* Play / Pause */}
+              {/* Main button — play/pause + record */}
               <TouchableOpacity
-                style={styles.playBtn}
-                onPress={handlePlayPause}
+                style={[styles.playBtn, isRecording && styles.playBtnRecording]}
+                onPress={handleMainButton}
               >
-                <Text style={styles.playBtnText}>{getPlayIcon()}</Text>
+                <Text style={styles.playBtnText}>{getMainButtonIcon()}</Text>
+                {isRecording && <View style={styles.recIndicator} />}
               </TouchableOpacity>
 
-              {/* Settings */}
-              <TouchableOpacity
-                style={styles.sideBtn}
-                onPress={() => navigation.navigate('Settings')}
-              >
-                <Text style={styles.sideBtnText}>⚙️</Text>
+              {/* Flip Camera */}
+              <TouchableOpacity style={styles.sideBtn} onPress={handleFlipCamera}>
+                <Text style={styles.sideBtnText}>🔄</Text>
               </TouchableOpacity>
+
             </View>
           </View>
         </View>
@@ -258,33 +310,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
 
+  // Permission screen
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  permissionTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  permissionMessage: {
+    color: '#aaa',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  permissionBtn: {
+    backgroundColor: '#e63946',
+    paddingVertical: 14,
+    paddingHorizontal: 36,
+    borderRadius: 30,
+    marginBottom: 16,
+  },
+  permissionBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  permissionSkipBtn: {
+    paddingVertical: 10,
+  },
+  permissionSkipText: {
+    color: '#e63946',
+    fontSize: 15,
+  },
+
   // Camera
   cameraSection: {
     overflow: 'hidden',
     backgroundColor: '#111',
-  },
-  recordingBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    gap: 6,
-  },
-  recDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#e63946',
-  },
-  recText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
   },
 
   // Divider
@@ -313,9 +384,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 16,
   },
-  scriptText: {
-    // dynamic styles applied inline
-  },
+  scriptText: {},
 
   // Controls overlay
   controlsOverlay: {
@@ -363,6 +432,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 20,
   },
+
+  // Main play+record button
   playBtn: {
     width: 72,
     height: 72,
@@ -376,10 +447,25 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  playBtnRecording: {
+    backgroundColor: '#b52530',
+    shadowOpacity: 0.8,
+  },
   playBtnText: {
     color: '#fff',
     fontSize: 28,
   },
+  recIndicator: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+  },
+
+  // Side buttons
   sideBtn: {
     width: 52,
     height: 52,
@@ -387,9 +473,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sideBtnRecording: {
-    backgroundColor: 'rgba(230,57,70,0.4)',
   },
   sideBtnText: {
     color: '#fff',

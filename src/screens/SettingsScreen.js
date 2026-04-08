@@ -15,13 +15,12 @@ export default function SettingsScreen() {
   const { settings, updateSettings } = useScripts();
 
   return (
-
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scroll}>
 
-          {/* ── CAMERA ── */}
-          <Text style={styles.sectionTitle}>📷  CAMERA</Text>
+          {/* CAMERA */}
+          <Text style={styles.sectionTitle}>CAMERA</Text>
           <View style={styles.card}>
 
             <View style={styles.row}>
@@ -42,7 +41,7 @@ export default function SettingsScreen() {
                         settings.cameraPosition === pos && styles.segmentTextActive,
                       ]}
                     >
-                      {pos === 'front' ? '🤳 Front' : '📷 Back'}
+                      {pos === 'front' ? 'Front' : 'Back'}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -71,8 +70,8 @@ export default function SettingsScreen() {
 
           </View>
 
-          {/* ── TEXT & SCROLL ── */}
-          <Text style={styles.sectionTitle}>📝  TEXT & SCROLL</Text>
+          {/* TEXT & SCROLL */}
+          <Text style={styles.sectionTitle}>TEXT & SCROLL</Text>
           <View style={styles.card}>
 
             <View style={styles.row}>
@@ -129,7 +128,7 @@ export default function SettingsScreen() {
                         settings.textAlign === align && styles.segmentTextActive,
                       ]}
                     >
-                      {align === 'left' ? '⬅' : align === 'center' ? '↔' : '➡'}
+                      {align === 'left' ? 'Left' : align === 'center' ? 'Center' : 'Right'}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -148,8 +147,8 @@ export default function SettingsScreen() {
 
           </View>
 
-          {/* ── COLORS ── */}
-          <Text style={styles.sectionTitle}>🎨  COLORS</Text>
+          {/* COLORS */}
+          <Text style={styles.sectionTitle}>COLORS</Text>
           <View style={styles.card}>
 
             <View style={styles.row}>
@@ -233,8 +232,6 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 15,
   },
-
-  // Segmented control
   segmented: {
     flexDirection: 'row',
     backgroundColor: '#111',
@@ -256,8 +253,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
   },
-
-  // Slider row
   sliderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -270,8 +265,6 @@ const styles = StyleSheet.create({
     width: 44,
     textAlign: 'right',
   },
-
-  // Color swatches
   colorRow: {
     flexDirection: 'row',
     gap: 10,

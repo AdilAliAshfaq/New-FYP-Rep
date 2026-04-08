@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,28 @@ import {
   Alert,
   SafeAreaView,
 } from 'react-native';
+import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import { useScripts } from '../context/ScriptContext';
 import { SUPPORTED_LANGUAGES } from '../utils/languages';
 
 export default function HomeScreen({ navigation }) {
-  const { scripts, deleteScript } = useScripts();
+  const { scripts, deleteScript, recordings, deleteRecording } = useScripts();
+  const [activeTab, setActiveTab] = useState('scripts'); // 'scripts' | 'recordings'
+  
+  // Track how many recordings the user has "seen"
+  const [seenCount, setSeenCount] = useState(recordings.length);
 
-  function handleDelete(script) {
+  // Clear the notification dot when the recordings tab is active
+  useEffect(() => {
+    if (activeTab === 'recordings') {
+      setSeenCount(recordings.length);
+    }
+  }, [activeTab, recordings.length]);
+
+  const hasNewRecording = recordings.length > seenCount;
+
+  // ── Scripts helpers ──────────────────────────────────────────────────────
+  function handleDeleteScript(script) {
     Alert.alert('Delete Script', `Delete "${script.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => deleteScript(script.id) },
@@ -31,9 +46,42 @@ export default function HomeScreen({ navigation }) {
     return lang ? lang.flag : '🌐';
   }
 
-  function renderItem({ item }) {
-    const wordCount = item.content.trim().split(/\s+/).length;
+  // ── Recordings helpers ───────────────────────────────────────────────────
+  function handleDeleteRecording(recording) {
+    Alert.alert('Delete Recording', 'Remove this recording from the list?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteRecording(recording.id) },
+    ]);
+  }
 
+  async function handleSaveToGallery(recording) {
+    try {
+      const videoPath = recording.path.startsWith('file://')
+        ? recording.path
+        : `file://${recording.path}`;
+
+      await CameraRoll.saveAsset(videoPath, { type: 'video' });
+      Alert.alert('Success', 'Video saved to your gallery! 🎥');
+    } catch (error) {
+      console.error('Save to gallery error:', error);
+      Alert.alert('Error', 'Failed to save video. Please ensure the app has Photo Gallery permissions.');
+    }
+  }
+
+  function formatDuration(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  function formatDate(timestamp) {
+    const d = new Date(timestamp);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  // ── Render script card ───────────────────────────────────────────────────
+  function renderScript({ item }) {
+    const wordCount = item.content.trim().split(/\s+/).length;
     return (
       <View style={styles.card}>
         <TouchableOpacity
@@ -64,7 +112,7 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity
             style={styles.deleteBtn}
-            onPress={() => handleDelete(item)}
+            onPress={() => handleDeleteScript(item)}
           >
             <Text style={styles.deleteBtnText}>✕</Text>
           </TouchableOpacity>
@@ -73,38 +121,131 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
+  // ── Render recording card ────────────────────────────────────────────────
+  function renderRecording({ item }) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardContent}>
+          <View style={styles.recordingHeader}>
+            <View style={styles.recDot} />
+            <Text style={styles.cardTitle} numberOfLines={1}>{item.scriptTitle}</Text>
+          </View>
+          <Text style={styles.cardMeta}>
+            {formatDate(item.createdAt)} · {formatDuration(item.duration)}
+          </Text>
+          <Text style={styles.recordingPath} numberOfLines={1}>{item.path}</Text>
+        </View>
+
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={[styles.saveBtn, { flex: 1, alignItems: 'center' }]}
+            onPress={() => handleSaveToGallery(item)}
+          >
+            <Text style={styles.saveBtnText}>Save</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.deleteBtn, { flex: 1, alignItems: 'center' }]}
+            onPress={() => handleDeleteRecording(item)}
+          >
+            <Text style={styles.deleteBtnText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Empty states ─────────────────────────────────────────────────────────
+  function ScriptsEmpty() {
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyIcon}>🎬</Text>
+        <Text style={styles.emptyTitle}>No scripts yet</Text>
+        <Text style={styles.emptySubtitle}>Tap the button below to create your first script</Text>
+      </View>
+    );
+  }
+
+  function RecordingsEmpty() {
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyIcon}>🎥</Text>
+        <Text style={styles.emptyTitle}>No recordings yet</Text>
+        <Text style={styles.emptySubtitle}>Recordings will appear here after you finish a teleprompter session</Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <FlatList
-        data={scripts}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🎬</Text>
-            <Text style={styles.emptyTitle}>No scripts yet</Text>
-            <Text style={styles.emptySubtitle}>Tap the button below to create your first script</Text>
-          </View>
-        }
-      />
 
-      {/* Bottom buttons */}
-      <View style={styles.fabRow}>
+      {/* Tab switcher */}
+      <View style={styles.tabRow}>
         <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => navigation.navigate('Settings')}
+          style={[styles.tab, activeTab === 'scripts' && styles.tabActive]}
+          onPress={() => setActiveTab('scripts')}
         >
-          <Text style={styles.settingsBtnText}>⚙</Text>
+          <Text style={[styles.tabText, activeTab === 'scripts' && styles.tabTextActive]}>
+            Scripts
+          </Text>
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={styles.fab}
-          onPress={() => navigation.navigate('Editor', {})}
+          style={[styles.tab, activeTab === 'recordings' && styles.tabActive]}
+          onPress={() => setActiveTab('recordings')}
         >
-          <Text style={styles.fabText}>+ New Script</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.tabText, activeTab === 'recordings' && styles.tabTextActive]}>
+              Recordings
+            </Text>
+            {/* The Notification Dot only shows if there's a new recording AND the tab is inactive */}
+            {hasNewRecording && activeTab !== 'recordings' && (
+              <View style={[styles.notificationDot, { backgroundColor: '#e63946' }]} />
+            )}
+          </View>
         </TouchableOpacity>
       </View>
+
+      {/* Scripts tab */}
+      {activeTab === 'scripts' && (
+        <FlatList
+          data={scripts}
+          keyExtractor={item => item.id}
+          renderItem={renderScript}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={<ScriptsEmpty />}
+        />
+      )}
+
+      {/* Recordings tab */}
+      {activeTab === 'recordings' && (
+        <FlatList
+          data={recordings}
+          keyExtractor={item => item.id}
+          renderItem={renderRecording}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={<RecordingsEmpty />}
+        />
+      )}
+
+      {/* Bottom buttons — only show on scripts tab */}
+      {activeTab === 'scripts' && (
+        <View style={styles.fabRow}>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={styles.settingsBtnText}>⚙</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => navigation.navigate('Editor', {})}
+          >
+            <Text style={styles.fabText}>+ New Script</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
     </SafeAreaView>
   );
 }
@@ -114,6 +255,44 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0a0a',
   },
+
+  // Tabs
+  tabRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 9,
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: '#e63946',
+  },
+  tabText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  notificationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+
   list: {
     padding: 16,
     paddingBottom: 110,
@@ -148,6 +327,25 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
+  // Recording specific
+  recordingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  recDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#e63946',
+  },
+  recordingPath: {
+    color: '#555',
+    fontSize: 11,
+    marginTop: 4,
+  },
+
   // Card action buttons
   cardActions: {
     flexDirection: 'row',
@@ -177,6 +375,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 14,
+  },
+  saveBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#2a2a2a',
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   deleteBtn: {
     paddingHorizontal: 14,
