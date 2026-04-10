@@ -8,6 +8,7 @@ import {
   Dimensions,
   StatusBar,
 } from 'react-native';
+import RadialGradient from 'react-native-radial-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScripts } from '../context/ScriptContext';
 import CameraView from '../components/CameraView';
@@ -15,11 +16,12 @@ import {
   useCameraPermission,
   useMicrophonePermission,
 } from 'react-native-vision-camera';
+import { Theme } from '../theme/Theme';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function TeleprompterScreen({ navigation, route }) {
-  const { getScript, settings, addRecording } = useScripts(); // ← addRecording added
+  const { getScript, settings, addRecording } = useScripts();
   const script = getScript(route.params.scriptId);
   const insets = useSafeAreaInsets();
 
@@ -29,7 +31,6 @@ export default function TeleprompterScreen({ navigation, route }) {
   const [isRecording, setIsRecording] = useState(false);
   const [cameraPosition, setCameraPosition] = useState(settings.cameraPosition);
 
-  // ── Permissions ────────────────────────────────────────────────────────────
   const {
     hasPermission: hasCameraPermission,
     requestPermission: requestCameraPermission,
@@ -37,7 +38,7 @@ export default function TeleprompterScreen({ navigation, route }) {
 
   const {
     hasPermission: hasMicPermission,
-    requestPermission: requestMicPermission,
+    requestPermission: requestMicrophonePermission,
   } = useMicrophonePermission();
 
   const hasAllPermissions = hasCameraPermission && hasMicPermission;
@@ -45,11 +46,10 @@ export default function TeleprompterScreen({ navigation, route }) {
   useEffect(() => {
     async function requestPermissions() {
       if (!hasCameraPermission) await requestCameraPermission();
-      if (!hasMicPermission) await requestMicPermission();
+      if (!hasMicPermission) await requestMicrophonePermission();
     }
     requestPermissions();
   }, []);
-  // ──────────────────────────────────────────────────────────────────────────
 
   const scrollRef = useRef(null);
   const scrollY = useRef(0);
@@ -61,7 +61,6 @@ export default function TeleprompterScreen({ navigation, route }) {
 
   const cameraHeight = SCREEN_HEIGHT * settings.cameraRatio;
 
-  // Auto-hide controls after 3 seconds when playing
   const resetControlsTimer = useCallback(() => {
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
     setShowControls(true);
@@ -77,7 +76,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     };
   }, [playState]);
 
-  // Smooth scroll animation loop
   const startScrollLoop = useCallback(() => {
     function animate(timestamp) {
       if (lastTimeRef.current === null) lastTimeRef.current = timestamp;
@@ -113,7 +111,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     return stopScrollLoop;
   }, [playState, startScrollLoop]);
 
-  // ── Combined play + record button ─────────────────────────────────────────
   function handleMainButton() {
     if (playState === 'idle' || playState === 'paused') {
       setPlayState('playing');
@@ -129,7 +126,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     }
     resetControlsTimer();
   }
-  // ──────────────────────────────────────────────────────────────────────────
 
   function handleReset() {
     stopScrollLoop();
@@ -173,7 +169,7 @@ export default function TeleprompterScreen({ navigation, route }) {
           style={styles.permissionBtn}
           onPress={async () => {
             if (!hasCameraPermission) await requestCameraPermission();
-            if (!hasMicPermission) await requestMicPermission();
+            if (!hasMicPermission) await requestMicrophonePermission();
           }}
         >
           <Text style={styles.permissionBtnText}>Grant Permissions</Text>
@@ -193,15 +189,32 @@ export default function TeleprompterScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
+      
+      {/* 1. Bottom-Left Glow for Teleprompter Screen */}
+      <RadialGradient
+        style={StyleSheet.absoluteFill}
+        colors={['#004243', '#081318']} 
+        stops={[0, 0.8]}
+        center={[0, SCREEN_HEIGHT * 0.9]} 
+        radius={SCREEN_WIDTH * 1.2} 
+      />
 
-      {/* Camera Feed */}
+      {/* 2. Top-Right Glow for Teleprompter Screen */}
+      <RadialGradient
+        style={StyleSheet.absoluteFill}
+        colors={['#013133', 'transparent']} 
+        stops={[0, 0.7]}
+        center={[SCREEN_WIDTH, 0]} 
+        radius={SCREEN_WIDTH} 
+      />
+
       <View style={[styles.cameraSection, { height: cameraHeight }]}>
         <CameraView
           height={cameraHeight}
           cameraPosition={cameraPosition}
           isRecording={isRecording}
           onRecordingStart={() => setIsRecording(true)}
-          onRecordingStop={async (video, err) => {   // ← updated callback
+          onRecordingStop={async (video, err) => {
             setIsRecording(false);
             if (video) {
               await addRecording({
@@ -209,21 +222,18 @@ export default function TeleprompterScreen({ navigation, route }) {
                 duration: video.duration ?? 0,
                 scriptTitle: script.title,
               });
-              console.log('Recording saved:', video.path);
             }
           }}
         />
       </View>
 
-      {/* Divider */}
       <View style={styles.divider}>
         <View style={styles.dividerHandle} />
       </View>
 
-      {/* Teleprompter */}
       <TouchableOpacity
         activeOpacity={1}
-        style={[styles.prompterSection, { backgroundColor: settings.backgroundColor }]}
+        style={styles.prompterSection} 
         onPress={resetControlsTimer}
       >
         <ScrollView
@@ -255,11 +265,8 @@ export default function TeleprompterScreen({ navigation, route }) {
         </ScrollView>
       </TouchableOpacity>
 
-      {/* Controls Overlay */}
       {showControls && (
         <View style={styles.controlsOverlay} pointerEvents="box-none">
-
-          {/* Top bar */}
           <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
             <TouchableOpacity
               style={styles.closeBtn}
@@ -273,16 +280,12 @@ export default function TeleprompterScreen({ navigation, route }) {
             <View style={{ width: 40 }} />
           </View>
 
-          {/* Bottom control bar */}
           <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 14 }]}>
             <View style={styles.playbackRow}>
-
-              {/* Reset */}
               <TouchableOpacity style={styles.sideBtn} onPress={handleReset}>
                 <Text style={styles.sideBtnText}>↺</Text>
               </TouchableOpacity>
 
-              {/* Main button — play/pause + record */}
               <TouchableOpacity
                 style={[styles.playBtn, isRecording && styles.playBtnRecording]}
                 onPress={handleMainButton}
@@ -291,11 +294,9 @@ export default function TeleprompterScreen({ navigation, route }) {
                 {isRecording && <View style={styles.recIndicator} />}
               </TouchableOpacity>
 
-              {/* Flip Camera */}
               <TouchableOpacity style={styles.sideBtn} onPress={handleFlipCamera}>
                 <Text style={styles.sideBtnText}>🔄</Text>
               </TouchableOpacity>
-
             </View>
           </View>
         </View>
@@ -307,75 +308,69 @@ export default function TeleprompterScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#081318', 
   },
-
-  // Permission screen
   permissionContainer: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
   permissionTitle: {
-    color: '#fff',
+    color: Theme.colors.primary, 
+    fontFamily: Theme.fonts.bold,
     fontSize: 22,
-    fontWeight: '700',
     marginBottom: 14,
     textAlign: 'center',
   },
   permissionMessage: {
-    color: '#aaa',
+    color: Theme.colors.secondary,
+    fontFamily: Theme.fonts.regular,
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
   },
   permissionBtn: {
-    backgroundColor: '#e63946',
+    backgroundColor: Theme.colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 36,
     borderRadius: 30,
     marginBottom: 16,
   },
   permissionBtnText: {
-    color: '#fff',
+    color: Theme.colors.background,
+    fontFamily: Theme.fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
   },
   permissionSkipBtn: {
     paddingVertical: 10,
   },
   permissionSkipText: {
-    color: '#e63946',
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.medium,
     fontSize: 15,
   },
-
-  // Camera
   cameraSection: {
     overflow: 'hidden',
-    backgroundColor: '#111',
+    backgroundColor: '#000', 
   },
-
-  // Divider
   divider: {
     height: 28,
-    backgroundColor: '#111',
+    backgroundColor: Theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#222',
+    borderColor: Theme.colors.border,
   },
   dividerHandle: {
     width: 48,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#444',
+    backgroundColor: Theme.colors.secondary,
+    opacity: 0.5,
   },
-
-  // Teleprompter
   prompterSection: {
     flex: 1,
     overflow: 'hidden',
@@ -384,9 +379,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 16,
   },
-  scriptText: {},
-
-  // Controls overlay
+  scriptText: {
+    fontFamily: Theme.fonts.medium,
+  },
   controlsOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between',
@@ -396,33 +391,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 10,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(10, 22, 25, 0.75)', 
   },
   closeBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeBtnText: {
-    color: '#fff',
+    color: Theme.colors.primary, 
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: Theme.fonts.bold,
   },
   scriptTitle: {
     flex: 1,
-    color: '#fff',
+    color: Theme.colors.primary, 
+    fontFamily: Theme.fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
     textAlign: 'center',
     marginHorizontal: 8,
   },
-
-  // Bottom controls
   bottomControls: {
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(10, 22, 25, 0.85)',
     paddingHorizontal: 20,
     paddingTop: 14,
   },
@@ -430,69 +423,66 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+    gap: 24,
   },
-
-  // Main play+record button
   playBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#e63946',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: Theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#e63946',
+    shadowColor: Theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 8,
   },
   playBtnRecording: {
-    backgroundColor: '#b52530',
+    backgroundColor: '#1cebb6', 
     shadowOpacity: 0.8,
   },
   playBtnText: {
-    color: '#fff',
+    color: Theme.colors.background, 
     fontSize: 28,
   },
   recIndicator: {
     position: 'absolute',
     top: 10,
     right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Theme.colors.error,
   },
-
-  // Side buttons
   sideBtn: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: Theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
   },
   sideBtnText: {
-    color: '#fff',
+    color: Theme.colors.primary, 
     fontSize: 22,
   },
-
-  // Error state
   errorContainer: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
     alignItems: 'center',
     justifyContent: 'center',
   },
   errorText: {
-    color: '#fff',
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.medium,
     fontSize: 18,
     marginBottom: 16,
   },
   backLink: {
-    color: '#e63946',
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.medium,
     fontSize: 16,
   },
 });

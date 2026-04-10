@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Theme } from '../theme/Theme';
 
 const ScriptContext = createContext(null);
 
@@ -10,8 +11,8 @@ const RECORDINGS_KEY = '@camprompter_recordings';
 const defaultSettings = {
   scrollSpeed: 50,
   fontSize: 28,
-  fontColor: '#ffffff',
-  backgroundColor: '#000000',
+  fontColor: Theme.colors.text, 
+  backgroundColor: Theme.colors.background,
   textAlign: 'center',
   mirrorText: false,
   cameraPosition: 'front',

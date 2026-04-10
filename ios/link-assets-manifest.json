@@ -1,0 +1,13 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "assets/fonts/Archia-Regular.otf",
+      "sha1": "17d0b946424337d52c0d184d6ae71cb0a593d002"
+    },
+    {
+      "path": "assets/fonts/Archia-SemiBold.ttf",
+      "sha1": "e80b5a74449cff2bd6c3f52c889f4636dfb7b28a"
+    }
+  ]
+}

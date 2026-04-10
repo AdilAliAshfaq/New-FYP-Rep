@@ -9,17 +9,25 @@ import {
   SafeAreaView,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // Dynamic Insets
+import AppBackground from '../components/AppBackground'; 
 import { useScripts } from '../context/ScriptContext';
+import { Theme } from '../theme/Theme';
 
 export default function SettingsScreen() {
   const { settings, updateSettings } = useScripts();
+  const insets = useSafeAreaInsets(); // Get notch/status bar height
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <AppBackground>
       <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          
+          {/* Dynamic Margin Applied Here */}
+          <Text style={[styles.integratedHeaderTitle, { marginTop: Math.max(insets.top + 16, 40) }]}>
+            Settings
+          </Text>
 
-          {/* CAMERA */}
           <Text style={styles.sectionTitle}>CAMERA</Text>
           <View style={styles.card}>
 
@@ -48,7 +56,7 @@ export default function SettingsScreen() {
               </View>
             </View>
 
-            <View style={styles.row}>
+            <View style={[styles.row, styles.lastRow]}>
               <Text style={styles.rowLabel}>Camera Height</Text>
               <View style={styles.sliderRow}>
                 <Slider
@@ -58,9 +66,9 @@ export default function SettingsScreen() {
                   step={0.05}
                   value={settings.cameraRatio}
                   onValueChange={v => updateSettings({ cameraRatio: v })}
-                  minimumTrackTintColor="#e63946"
-                  maximumTrackTintColor="#333"
-                  thumbTintColor="#e63946"
+                  minimumTrackTintColor={Theme.colors.primary}
+                  maximumTrackTintColor={Theme.colors.border}
+                  thumbTintColor={Theme.colors.primary}
                 />
                 <Text style={styles.sliderVal}>
                   {Math.round(settings.cameraRatio * 100)}%
@@ -70,7 +78,6 @@ export default function SettingsScreen() {
 
           </View>
 
-          {/* TEXT & SCROLL */}
           <Text style={styles.sectionTitle}>TEXT & SCROLL</Text>
           <View style={styles.card}>
 
@@ -84,9 +91,9 @@ export default function SettingsScreen() {
                   step={2}
                   value={settings.fontSize}
                   onValueChange={v => updateSettings({ fontSize: v })}
-                  minimumTrackTintColor="#e63946"
-                  maximumTrackTintColor="#333"
-                  thumbTintColor="#e63946"
+                  minimumTrackTintColor={Theme.colors.primary}
+                  maximumTrackTintColor={Theme.colors.border}
+                  thumbTintColor={Theme.colors.primary}
                 />
                 <Text style={styles.sliderVal}>{settings.fontSize}px</Text>
               </View>
@@ -102,9 +109,9 @@ export default function SettingsScreen() {
                   step={5}
                   value={settings.scrollSpeed}
                   onValueChange={v => updateSettings({ scrollSpeed: v })}
-                  minimumTrackTintColor="#e63946"
-                  maximumTrackTintColor="#333"
-                  thumbTintColor="#e63946"
+                  minimumTrackTintColor={Theme.colors.primary}
+                  maximumTrackTintColor={Theme.colors.border}
+                  thumbTintColor={Theme.colors.primary}
                 />
                 <Text style={styles.sliderVal}>{settings.scrollSpeed}</Text>
               </View>
@@ -140,21 +147,20 @@ export default function SettingsScreen() {
               <Switch
                 value={settings.mirrorText}
                 onValueChange={v => updateSettings({ mirrorText: v })}
-                trackColor={{ false: '#333', true: '#e63946' }}
-                thumbColor="#fff"
+                trackColor={{ false: Theme.colors.border, true: Theme.colors.primary }}
+                thumbColor={Theme.colors.text}
               />
             </View>
 
           </View>
 
-          {/* COLORS */}
           <Text style={styles.sectionTitle}>COLORS</Text>
           <View style={styles.card}>
 
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Font Color</Text>
               <View style={styles.colorRow}>
-                {['#ffffff', '#ffff00', '#00ff88', '#ff9900'].map(color => (
+                {['#ffffff', '#00fccf', '#8b9d9f', '#ffcc00'].map(color => (
                   <TouchableOpacity
                     key={color}
                     style={[
@@ -171,7 +177,7 @@ export default function SettingsScreen() {
             <View style={[styles.row, styles.lastRow]}>
               <Text style={styles.rowLabel}>Background</Text>
               <View style={styles.colorRow}>
-                {['#000000', '#111111', '#001a00', '#00001a'].map(color => (
+                {['#0a1619', '#081318', '#122629', '#0d1a26'].map(color => (
                   <TouchableOpacity
                     key={color}
                     style={[
@@ -189,7 +195,7 @@ export default function SettingsScreen() {
 
         </ScrollView>
       </SafeAreaView>
-    </View>
+    </AppBackground>
   );
 }
 
@@ -197,23 +203,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  integratedHeaderTitle: {
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.semiBold,
+    fontSize: 22,
+    fontWeight: 'bold',
+    // marginTop handled dynamically
+    marginBottom: 12,
+    textAlign: 'left',
+  },
   scroll: {
     padding: 20,
     paddingBottom: 50,
   },
   sectionTitle: {
-    color: '#888',
+    color: Theme.colors.secondary,
+    fontFamily: Theme.fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginTop: 24,
     marginBottom: 10,
+    textTransform: 'uppercase',
   },
   card: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: Theme.colors.surface,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: Theme.colors.border,
     overflow: 'hidden',
   },
   row: {
@@ -221,37 +237,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    borderBottomColor: Theme.colors.border,
   },
   lastRow: {
     borderBottomWidth: 0,
   },
   rowLabel: {
-    color: '#ccc',
+    color: Theme.colors.text,
+    fontFamily: Theme.fonts.medium,
     fontSize: 15,
   },
   segmented: {
     flexDirection: 'row',
-    backgroundColor: '#111',
-    borderRadius: 8,
+    backgroundColor: Theme.colors.background,
+    borderRadius: 10,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Theme.colors.border,
   },
   segment: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   segmentActive: {
-    backgroundColor: '#e63946',
+    backgroundColor: Theme.colors.primary,
   },
   segmentText: {
-    color: '#777',
+    color: Theme.colors.secondary,
+    fontFamily: Theme.fonts.medium,
     fontSize: 13,
   },
   segmentTextActive: {
-    color: '#fff',
-    fontWeight: '700',
+    color: Theme.colors.background, 
+    fontFamily: Theme.fonts.bold,
   },
   sliderRow: {
     flexDirection: 'row',
@@ -259,24 +279,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sliderVal: {
-    color: '#e63946',
+    color: Theme.colors.primary,
+    fontFamily: Theme.fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
     width: 44,
     textAlign: 'right',
   },
   colorRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   colorSwatch: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: Theme.colors.border,
   },
   colorSwatchActive: {
-    borderColor: '#e63946',
+    borderColor: Theme.colors.primary,
+    transform: [{ scale: 1.1 }], 
   },
 });

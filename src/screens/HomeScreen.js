@@ -9,17 +9,19 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
+import AppBackground from '../components/AppBackground';
 import { useScripts } from '../context/ScriptContext';
 import { SUPPORTED_LANGUAGES } from '../utils/languages';
+import { Theme } from '../theme/Theme'; 
 
 export default function HomeScreen({ navigation }) {
   const { scripts, deleteScript, recordings, deleteRecording } = useScripts();
-  const [activeTab, setActiveTab] = useState('scripts'); // 'scripts' | 'recordings'
-  
-  // Track how many recordings the user has "seen"
+  const [activeTab, setActiveTab] = useState('scripts');
   const [seenCount, setSeenCount] = useState(recordings.length);
+  
+  const insets = useSafeAreaInsets(); 
 
-  // Clear the notification dot when the recordings tab is active
   useEffect(() => {
     if (activeTab === 'recordings') {
       setSeenCount(recordings.length);
@@ -28,7 +30,6 @@ export default function HomeScreen({ navigation }) {
 
   const hasNewRecording = recordings.length > seenCount;
 
-  // ── Scripts helpers ──────────────────────────────────────────────────────
   function handleDeleteScript(script) {
     Alert.alert('Delete Script', `Delete "${script.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -46,7 +47,6 @@ export default function HomeScreen({ navigation }) {
     return lang ? lang.flag : '🌐';
   }
 
-  // ── Recordings helpers ───────────────────────────────────────────────────
   function handleDeleteRecording(recording) {
     Alert.alert('Delete Recording', 'Remove this recording from the list?', [
       { text: 'Cancel', style: 'cancel' },
@@ -79,7 +79,6 @@ export default function HomeScreen({ navigation }) {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // ── Render script card ───────────────────────────────────────────────────
   function renderScript({ item }) {
     const wordCount = item.content.trim().split(/\s+/).length;
     return (
@@ -121,7 +120,6 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  // ── Render recording card ────────────────────────────────────────────────
   function renderRecording({ item }) {
     return (
       <View style={styles.card}>
@@ -155,7 +153,6 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  // ── Empty states ─────────────────────────────────────────────────────────
   function ScriptsEmpty() {
     return (
       <View style={styles.emptyState}>
@@ -177,114 +174,120 @@ export default function HomeScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <AppBackground>
+      <SafeAreaView style={styles.container}>
+        
+        <Text style={[styles.integratedHeaderTitle, { marginTop: Math.max(insets.top + 16, 40) }]}>
+          CamPrompter
+        </Text>
 
-      {/* Tab switcher */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'scripts' && styles.tabActive]}
-          onPress={() => setActiveTab('scripts')}
-        >
-          <Text style={[styles.tabText, activeTab === 'scripts' && styles.tabTextActive]}>
-            Scripts
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'recordings' && styles.tabActive]}
-          onPress={() => setActiveTab('recordings')}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[styles.tabText, activeTab === 'recordings' && styles.tabTextActive]}>
-              Recordings
+        <View style={styles.tabRow}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'scripts' && styles.tabActive]}
+            onPress={() => setActiveTab('scripts')}
+          >
+            <Text style={[styles.tabText, activeTab === 'scripts' && styles.tabTextActive]}>
+              Scripts
             </Text>
-            {/* The Notification Dot only shows if there's a new recording AND the tab is inactive */}
-            {hasNewRecording && activeTab !== 'recordings' && (
-              <View style={[styles.notificationDot, { backgroundColor: '#e63946' }]} />
-            )}
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Scripts tab */}
-      {activeTab === 'scripts' && (
-        <FlatList
-          data={scripts}
-          keyExtractor={item => item.id}
-          renderItem={renderScript}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={<ScriptsEmpty />}
-        />
-      )}
-
-      {/* Recordings tab */}
-      {activeTab === 'recordings' && (
-        <FlatList
-          data={recordings}
-          keyExtractor={item => item.id}
-          renderItem={renderRecording}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={<RecordingsEmpty />}
-        />
-      )}
-
-      {/* Bottom buttons — only show on scripts tab */}
-      {activeTab === 'scripts' && (
-        <View style={styles.fabRow}>
-          <TouchableOpacity
-            style={styles.settingsBtn}
-            onPress={() => navigation.navigate('Settings')}
-          >
-            <Text style={styles.settingsBtnText}>⚙</Text>
           </TouchableOpacity>
-
           <TouchableOpacity
-            style={styles.fab}
-            onPress={() => navigation.navigate('Editor', {})}
+            style={[styles.tab, activeTab === 'recordings' && styles.tabActive]}
+            onPress={() => setActiveTab('recordings')}
           >
-            <Text style={styles.fabText}>+ New Script</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.tabText, activeTab === 'recordings' && styles.tabTextActive]}>
+                Recordings
+              </Text>
+              {hasNewRecording && activeTab !== 'recordings' && (
+                <View style={[styles.notificationDot, { backgroundColor: Theme.colors.primary }]} />
+              )}
+            </View>
           </TouchableOpacity>
         </View>
-      )}
 
-    </SafeAreaView>
+        {activeTab === 'scripts' && (
+          <FlatList
+            data={scripts}
+            keyExtractor={item => item.id}
+            renderItem={renderScript}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={<ScriptsEmpty />}
+          />
+        )}
+
+        {activeTab === 'recordings' && (
+          <FlatList
+            data={recordings}
+            keyExtractor={item => item.id}
+            renderItem={renderRecording}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={<RecordingsEmpty />}
+          />
+        )}
+
+        {activeTab === 'scripts' && (
+          <View style={styles.fabRow}>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => navigation.navigate('Settings')}
+            >
+              <Text style={styles.settingsBtnText}>⚙</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() => navigation.navigate('Editor', {})}
+            >
+              <Text style={styles.fabText}>+ New Script</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+      </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
   },
-
-  // Tabs
+  integratedHeaderTitle: {
+    color: Theme.colors.primary, 
+    fontFamily: Theme.fonts.semiBold,
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    textAlign: 'left',
+  },
   tabRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginTop: 12,
     marginBottom: 4,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 4,
+    backgroundColor: Theme.colors.surface,
+    borderRadius: 16,
+    padding: 6,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: Theme.colors.border,
   },
   tab: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 9,
+    borderRadius: 12,
     alignItems: 'center',
   },
   tabActive: {
-    backgroundColor: '#e63946',
+    backgroundColor: Theme.colors.primary,
   },
   tabText: {
-    color: '#666',
+    color: Theme.colors.secondary,
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Theme.fonts.bold,
   },
   tabTextActive: {
-    color: '#fff',
-    fontWeight: '700',
+    color: Theme.colors.background,
+    fontFamily: Theme.fonts.bold,
   },
   notificationDot: {
     width: 8,
@@ -292,42 +295,40 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginLeft: 6,
   },
-
   list: {
     padding: 16,
-    paddingBottom: 110,
+    // INVISIBLE BOX ADDED HERE: Increased from 110 to 160 so the last item completely clears the FAB
+    paddingBottom: 160, 
   },
-
-  // Card
   card: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
+    backgroundColor: Theme.colors.surface,
+    borderRadius: 16,
     marginBottom: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: Theme.colors.border,
   },
   cardContent: {
     padding: 16,
   },
   cardTitle: {
-    color: '#fff',
+    color: Theme.colors.text,
     fontSize: 18,
-    fontWeight: '700',
+    fontFamily: Theme.fonts.bold,
     marginBottom: 4,
   },
   cardMeta: {
-    color: '#888',
+    color: Theme.colors.primary,
     fontSize: 13,
+    fontFamily: Theme.fonts.medium,
     marginBottom: 8,
   },
   cardPreview: {
-    color: '#ccc',
+    color: Theme.colors.secondary,
     fontSize: 14,
     lineHeight: 20,
+    fontFamily: Theme.fonts.regular,
   },
-
-  // Recording specific
   recordingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -338,69 +339,73 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#e63946',
+    backgroundColor: Theme.colors.error,
   },
   recordingPath: {
-    color: '#555',
+    color: Theme.colors.secondary,
+    opacity: 0.5,
     fontSize: 11,
     marginTop: 4,
+    fontFamily: Theme.fonts.regular,
   },
-
-  // Card action buttons
   cardActions: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
+    borderTopColor: Theme.colors.border,
     padding: 8,
     gap: 8,
   },
   editBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.colors.background,
   },
   editBtnText: {
-    color: '#ccc',
+    color: Theme.colors.text,
     fontSize: 14,
+    fontFamily: Theme.fonts.medium,
   },
   startBtn: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#e63946',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.colors.primary,
   },
   startBtnText: {
-    color: '#fff',
-    fontWeight: '700',
+    color: Theme.colors.background,
+    fontFamily: Theme.fonts.bold,
     fontSize: 14,
   },
   saveBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    // CHANGED: Now uses the vibrant Cyan color
+    backgroundColor: Theme.colors.primary, 
   },
   saveBtnText: {
-    color: '#fff',
+    // CHANGED: Dark text for high contrast on the Cyan background
+    color: Theme.colors.background, 
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Theme.fonts.bold,
   },
   deleteBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#444',
+    borderColor: Theme.colors.border,
+    justifyContent: 'center',
   },
   deleteBtnText: {
-    color: '#888',
+    color: Theme.colors.secondary,
     fontSize: 14,
+    fontFamily: Theme.fonts.medium,
   },
-
-  // Empty state
   emptyState: {
     alignItems: 'center',
     marginTop: 100,
@@ -410,19 +415,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    color: '#fff',
+    color: Theme.colors.text,
     fontSize: 22,
-    fontWeight: '700',
+    fontFamily: Theme.fonts.bold,
   },
   emptySubtitle: {
-    color: '#666',
+    color: Theme.colors.secondary,
     fontSize: 15,
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 32,
+    fontFamily: Theme.fonts.regular,
   },
-
-  // FAB row
   fabRow: {
     position: 'absolute',
     bottom: 24,
@@ -433,32 +437,32 @@ const styles = StyleSheet.create({
   },
   settingsBtn: {
     width: 56,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: Theme.colors.surface,
+    borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: Theme.colors.border,
   },
   settingsBtnText: {
-    color: '#fff',
-    fontSize: 22,
+    color: Theme.colors.primary,
+    fontSize: 24,
   },
   fab: {
     flex: 1,
-    backgroundColor: '#e63946',
-    borderRadius: 14,
+    backgroundColor: Theme.colors.primary,
+    borderRadius: 100,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#e63946',
+    shadowColor: Theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 8,
   },
   fabText: {
-    color: '#fff',
-    fontWeight: '800',
+    color: Theme.colors.background,
+    fontFamily: Theme.fonts.bold,
     fontSize: 16,
   },
 });
