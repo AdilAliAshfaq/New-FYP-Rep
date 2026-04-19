@@ -1,22 +1,25 @@
 export const Theme = {
   colors: {
-    // The new solid background (used as a fallback and to soften UI elements)
-    background: '#0a1619', 
+    // The new solid background (light off-white)
+    background: '#F5F5F7',
     
-    // The new 4-color gradient background
-    backgroundGradient: ['#081318', '#004243', '#00282f', '#013133'], 
+    // Gradient replaced with subtle light tints — keep as array so other code doesn't break
+    backgroundGradient: ['#FFFFFF', '#F5F5F7', '#EFE8FF', '#E8DCFF'],
     
-    surface: '#122629',    // Card/Input background
-    primary: '#00fccf',    // The bright neon cyan accent
-    secondary: '#8b9d9f',  // Muted silver/grey text
-    text: '#ffffff',       // Pure white for headings
-    border: '#1a3338',     // Subtle borders for inputs/cards
-    error: '#ff4d4d',
+    surface: '#FFFFFF',        // Card/Input background — clean white
+    primary: '#5E17EB',        // Vibrant purple accent
+    primaryDark: '#4A11BC',    // Pressed/hover state
+    primaryLight: '#E8DCFF',   // Soft purple tint for subtle fills
+    secondary: '#6B7280',      // Muted gray text
+    text: '#1A1A2E',           // Near-black for headings
+    border: '#E5E7EB',         // Subtle light gray borders
+    error: '#EF4444',
+    success: '#10B981',
   },
   fonts: {
     regular: 'Archia-Regular',
-    medium: 'Archia-Medium',     
+    medium: 'Archia-Medium',
     semiBold: 'Archia-SemiBold',
-    bold: 'Archia-Bold',         
+    bold: 'Archia-Bold',
   }
 };

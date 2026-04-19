@@ -9,11 +9,11 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
-import AppBackground from '../components/AppBackground'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppBackground from '../components/AppBackground';
 import { useScripts } from '../context/ScriptContext';
 import { SUPPORTED_LANGUAGES } from '../utils/languages';
-import { Theme } from '../theme/Theme'; 
+import { Theme } from '../theme/Theme';
 
 export default function EditorScreen({ navigation, route }) {
   const { addScript, updateScript, deleteScript, getScript } = useScripts();
@@ -25,7 +25,7 @@ export default function EditorScreen({ navigation, route }) {
   const [language, setLanguage] = useState(SUPPORTED_LANGUAGES[0].code);
   const [showLangDropdown, setShowLangDropdown] = useState(false);
 
-  const insets = useSafeAreaInsets(); 
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (isEditing) {
@@ -62,16 +62,15 @@ export default function EditorScreen({ navigation, route }) {
   return (
     <AppBackground>
       <SafeAreaView style={styles.container}>
-        
+
         <View style={[styles.customTitleBar, { marginTop: Math.max(insets.top + 16, 40) }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={{ paddingRight: 15 }}>
-            {/* Replaced "Go Back" with a clean Cross icon */}
             <Text style={styles.integratedBackText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.integratedEditorTitle}>
             {isEditing ? 'Edit Script' : 'Create Script'}
           </Text>
-          <View style={{width: 40}} /> {/* Adjusted spacer to balance the new cross icon */}
+          <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -154,15 +153,14 @@ const styles = StyleSheet.create({
   },
   integratedBackText: {
     color: Theme.colors.primary,
-    fontFamily: Theme.fonts.bold, // Bolder for the cross icon
-    fontSize: 24, // Larger size to act as an icon
+    fontFamily: Theme.fonts.bold,
+    fontSize: 24,
   },
   integratedEditorTitle: {
     flex: 1,
-    color: Theme.colors.primary,
+    color: Theme.colors.text,
     fontFamily: Theme.fonts.semiBold,
     fontSize: 20,
-    fontWeight: 'bold',
     textAlign: 'center',
   },
   scroll: {
@@ -171,7 +169,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: Theme.colors.secondary,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
     fontSize: 12,
     letterSpacing: 1,
     marginBottom: 8,
@@ -182,7 +180,7 @@ const styles = StyleSheet.create({
     color: Theme.colors.text,
     fontFamily: Theme.fonts.medium,
     fontSize: 17,
-    borderRadius: 16, 
+    borderRadius: 16,
     padding: 16,
     marginBottom: 24,
     borderWidth: 1,
@@ -225,7 +223,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.colors.border,
   },
   langOptionSelected: {
-    backgroundColor: Theme.colors.background,
+    backgroundColor: Theme.colors.primaryLight,
   },
   langOptionText: {
     color: Theme.colors.text,
@@ -271,7 +269,7 @@ const styles = StyleSheet.create({
   cancelBtn: {
     flex: 1,
     backgroundColor: Theme.colors.surface,
-    borderRadius: 100, 
+    borderRadius: 100,
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1,
@@ -279,24 +277,24 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: {
     color: Theme.colors.secondary,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
     fontSize: 16,
   },
   saveBtn: {
     flex: 2,
     backgroundColor: Theme.colors.primary,
-    borderRadius: 100, 
+    borderRadius: 100,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   saveBtnText: {
-    color: Theme.colors.background, 
-    fontFamily: Theme.fonts.bold,
+    color: '#FFFFFF',
+    fontFamily: Theme.fonts.semiBold,
     fontSize: 16,
   },
 });

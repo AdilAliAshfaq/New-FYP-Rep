@@ -9,21 +9,20 @@ import {
   SafeAreaView,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // Dynamic Insets
-import AppBackground from '../components/AppBackground'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppBackground from '../components/AppBackground';
 import { useScripts } from '../context/ScriptContext';
 import { Theme } from '../theme/Theme';
 
 export default function SettingsScreen() {
   const { settings, updateSettings } = useScripts();
-  const insets = useSafeAreaInsets(); // Get notch/status bar height
+  const insets = useSafeAreaInsets();
 
   return (
     <AppBackground>
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          
-          {/* Dynamic Margin Applied Here */}
+
           <Text style={[styles.integratedHeaderTitle, { marginTop: Math.max(insets.top + 16, 40) }]}>
             Settings
           </Text>
@@ -148,7 +147,7 @@ export default function SettingsScreen() {
                 value={settings.mirrorText}
                 onValueChange={v => updateSettings({ mirrorText: v })}
                 trackColor={{ false: Theme.colors.border, true: Theme.colors.primary }}
-                thumbColor={Theme.colors.text}
+                thumbColor={'#FFFFFF'}
               />
             </View>
 
@@ -160,7 +159,7 @@ export default function SettingsScreen() {
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Font Color</Text>
               <View style={styles.colorRow}>
-                {['#ffffff', '#00fccf', '#8b9d9f', '#ffcc00'].map(color => (
+                {['#1A1A2E', '#5E17EB', '#6B7280', '#FFFFFF'].map(color => (
                   <TouchableOpacity
                     key={color}
                     style={[
@@ -177,7 +176,7 @@ export default function SettingsScreen() {
             <View style={[styles.row, styles.lastRow]}>
               <Text style={styles.rowLabel}>Background</Text>
               <View style={styles.colorRow}>
-                {['#0a1619', '#081318', '#122629', '#0d1a26'].map(color => (
+                {['#FFFFFF', '#F5F5F7', '#E8DCFF', '#1A1A2E'].map(color => (
                   <TouchableOpacity
                     key={color}
                     style={[
@@ -206,10 +205,8 @@ const styles = StyleSheet.create({
   integratedHeaderTitle: {
     color: Theme.colors.primary,
     fontFamily: Theme.fonts.semiBold,
-    fontSize: 22,
-    fontWeight: 'bold',
-    // marginTop handled dynamically
-    marginBottom: 12,
+    fontSize: 24,
+    marginBottom: 16,
     textAlign: 'left',
   },
   scroll: {
@@ -218,7 +215,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Theme.colors.secondary,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
     fontSize: 12,
     letterSpacing: 1,
     marginTop: 24,
@@ -231,6 +228,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.colors.border,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   row: {
     flexDirection: 'row',
@@ -270,8 +272,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   segmentTextActive: {
-    color: Theme.colors.background, 
-    fontFamily: Theme.fonts.bold,
+    color: '#FFFFFF',
+    fontFamily: Theme.fonts.semiBold,
   },
   sliderRow: {
     flexDirection: 'row',
@@ -280,7 +282,7 @@ const styles = StyleSheet.create({
   },
   sliderVal: {
     color: Theme.colors.primary,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
     fontSize: 13,
     width: 44,
     textAlign: 'right',
@@ -298,6 +300,6 @@ const styles = StyleSheet.create({
   },
   colorSwatchActive: {
     borderColor: Theme.colors.primary,
-    transform: [{ scale: 1.1 }], 
+    transform: [{ scale: 1.1 }],
   },
 });

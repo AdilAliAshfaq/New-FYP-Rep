@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'react-native';
 import { ScriptProvider } from './src/context/ScriptContext';
-import AppBackground from './src/components/AppBackground'; 
+import AppBackground from './src/components/AppBackground';
 import HomeScreen from './src/screens/HomeScreen';
 import EditorScreen from './src/screens/EditorScreen';
 import TeleprompterScreen from './src/screens/TeleprompterScreen';
@@ -16,11 +16,11 @@ export default function App() {
     <ScriptProvider>
       <AppBackground>
         <NavigationContainer>
-          <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
+          <StatusBar barStyle="dark-content" translucent={true} backgroundColor="transparent" />
           <Stack.Navigator
             initialRouteName="Home"
             screenOptions={{
-              headerShown: false, // Hides default header for the flawless gradient look
+              headerShown: false,
             }}
           >
             <Stack.Screen name="Home" component={HomeScreen} />

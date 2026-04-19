@@ -9,18 +9,19 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppBackground from '../components/AppBackground';
 import { useScripts } from '../context/ScriptContext';
+import Icon from '../components/Icon'; // <-- IMPORTED ICON COMPONENT
 import { SUPPORTED_LANGUAGES } from '../utils/languages';
-import { Theme } from '../theme/Theme'; 
+import { Theme } from '../theme/Theme';
 
 export default function HomeScreen({ navigation }) {
   const { scripts, deleteScript, recordings, deleteRecording } = useScripts();
   const [activeTab, setActiveTab] = useState('scripts');
   const [seenCount, setSeenCount] = useState(recordings.length);
-  
-  const insets = useSafeAreaInsets(); 
+
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (activeTab === 'recordings') {
@@ -102,11 +103,15 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.editBtnText}>Edit</Text>
           </TouchableOpacity>
 
+          {/* PLAY ICON */}
           <TouchableOpacity
             style={styles.startBtn}
             onPress={() => navigation.navigate('Teleprompter', { scriptId: item.id })}
           >
-            <Text style={styles.startBtnText}>▶  Start</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon name="play" size={16} color="#FFFFFF" />
+              <Text style={styles.startBtnText}>Start</Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -176,7 +181,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <AppBackground>
       <SafeAreaView style={styles.container}>
-        
+
         <Text style={[styles.integratedHeaderTitle, { marginTop: Math.max(insets.top + 16, 40) }]}>
           CamPrompter
         </Text>
@@ -227,11 +232,12 @@ export default function HomeScreen({ navigation }) {
 
         {activeTab === 'scripts' && (
           <View style={styles.fabRow}>
+            {/* SETTINGS ICON */}
             <TouchableOpacity
               style={styles.settingsBtn}
               onPress={() => navigation.navigate('Settings')}
             >
-              <Text style={styles.settingsBtnText}>⚙</Text>
+              <Icon name="settings" size={26} color={Theme.colors.primary} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -253,12 +259,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   integratedHeaderTitle: {
-    color: Theme.colors.primary, 
+    color: Theme.colors.primary,
     fontFamily: Theme.fonts.semiBold,
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 24,
     marginHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 16,
     textAlign: 'left',
   },
   tabRow: {
@@ -283,11 +288,11 @@ const styles = StyleSheet.create({
   tabText: {
     color: Theme.colors.secondary,
     fontSize: 14,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
   },
   tabTextActive: {
-    color: Theme.colors.background,
-    fontFamily: Theme.fonts.bold,
+    color: '#FFFFFF',
+    fontFamily: Theme.fonts.semiBold,
   },
   notificationDot: {
     width: 8,
@@ -297,8 +302,7 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
-    // INVISIBLE BOX ADDED HERE: Increased from 110 to 160 so the last item completely clears the FAB
-    paddingBottom: 160, 
+    paddingBottom: 160,
   },
   card: {
     backgroundColor: Theme.colors.surface,
@@ -307,6 +311,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: Theme.colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   cardContent: {
     padding: 16,
@@ -314,7 +323,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: Theme.colors.text,
     fontSize: 18,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
     marginBottom: 4,
   },
   cardMeta: {
@@ -343,7 +352,7 @@ const styles = StyleSheet.create({
   },
   recordingPath: {
     color: Theme.colors.secondary,
-    opacity: 0.5,
+    opacity: 0.6,
     fontSize: 11,
     marginTop: 4,
     fontFamily: Theme.fonts.regular,
@@ -359,12 +368,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: Theme.colors.background,
+    backgroundColor: Theme.colors.primaryLight,
   },
   editBtnText: {
-    color: Theme.colors.text,
+    color: Theme.colors.primary,
     fontSize: 14,
-    fontFamily: Theme.fonts.medium,
+    fontFamily: Theme.fonts.semiBold,
   },
   startBtn: {
     flex: 1,
@@ -375,22 +384,20 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.primary,
   },
   startBtnText: {
-    color: Theme.colors.background,
-    fontFamily: Theme.fonts.bold,
+    color: '#FFFFFF',
+    fontFamily: Theme.fonts.semiBold,
     fontSize: 14,
   },
   saveBtn: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    // CHANGED: Now uses the vibrant Cyan color
-    backgroundColor: Theme.colors.primary, 
+    backgroundColor: Theme.colors.primary,
   },
   saveBtnText: {
-    // CHANGED: Dark text for high contrast on the Cyan background
-    color: Theme.colors.background, 
+    color: '#FFFFFF',
     fontSize: 14,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
   },
   deleteBtn: {
     paddingHorizontal: 16,
@@ -417,7 +424,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     color: Theme.colors.text,
     fontSize: 22,
-    fontFamily: Theme.fonts.bold,
+    fontFamily: Theme.fonts.semiBold,
   },
   emptySubtitle: {
     color: Theme.colors.secondary,
@@ -443,10 +450,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Theme.colors.border,
-  },
-  settingsBtnText: {
-    color: Theme.colors.primary,
-    fontSize: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   fab: {
     flex: 1,
@@ -455,14 +463,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: Theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
     elevation: 8,
   },
   fabText: {
-    color: Theme.colors.background,
-    fontFamily: Theme.fonts.bold,
+    color: '#FFFFFF',
+    fontFamily: Theme.fonts.semiBold,
     fontSize: 16,
   },
 });
