@@ -7,12 +7,14 @@ import {
   StyleSheet,
   Alert,
   SafeAreaView,
+  Modal,
 } from 'react-native';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Video from 'react-native-video';
 import AppBackground from '../components/AppBackground';
 import { useScripts } from '../context/ScriptContext';
-import Icon from '../components/Icon'; // <-- IMPORTED ICON COMPONENT
+import Icon from '../components/Icon'; 
 import { SUPPORTED_LANGUAGES } from '../utils/languages';
 import { Theme } from '../theme/Theme';
 
@@ -20,6 +22,9 @@ export default function HomeScreen({ navigation }) {
   const { scripts, deleteScript, recordings, deleteRecording } = useScripts();
   const [activeTab, setActiveTab] = useState('scripts');
   const [seenCount, setSeenCount] = useState(recordings.length);
+  
+  // State for the video preview modal
+  const [previewVideo, setPreviewVideo] = useState(null);
 
   const insets = useSafeAreaInsets();
 
@@ -103,7 +108,6 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.editBtnText}>Edit</Text>
           </TouchableOpacity>
 
-          {/* PLAY ICON */}
           <TouchableOpacity
             style={styles.startBtn}
             onPress={() => navigation.navigate('Teleprompter', { scriptId: item.id })}
@@ -136,7 +140,18 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.cardMeta}>
             {formatDate(item.createdAt)} · {formatDuration(item.duration)}
           </Text>
-          <Text style={styles.recordingPath} numberOfLines={1}>{item.path}</Text>
+          
+          {/* Exactly where you circled: Path on the left, Play button on the right */}
+          <View style={styles.pathRow}>
+            <Text style={styles.recordingPath} numberOfLines={1}>{item.path}</Text>
+            <TouchableOpacity 
+              style={styles.previewPlayBtn}
+              onPress={() => setPreviewVideo(item.path)}
+            >
+              <Icon name="play" size={14} color={Theme.colors.primary} />
+            </TouchableOpacity>
+          </View>
+
         </View>
 
         <View style={styles.cardActions}>
@@ -232,7 +247,6 @@ export default function HomeScreen({ navigation }) {
 
         {activeTab === 'scripts' && (
           <View style={styles.fabRow}>
-            {/* SETTINGS ICON */}
             <TouchableOpacity
               style={styles.settingsBtn}
               onPress={() => navigation.navigate('Settings')}
@@ -250,6 +264,27 @@ export default function HomeScreen({ navigation }) {
         )}
 
       </SafeAreaView>
+
+      {/* ── Full Screen Video Player Modal ── */}
+      <Modal visible={!!previewVideo} animationType="slide" onRequestClose={() => setPreviewVideo(null)}>
+        <View style={styles.playerContainer}>
+          {previewVideo && (
+            <Video
+              source={{ uri: previewVideo.startsWith('file://') ? previewVideo : `file://${previewVideo}` }}
+              style={styles.fullScreenVideo}
+              controls={true}
+              resizeMode="contain"
+              ignoreSilentSwitch="ignore"
+            />
+          )}
+          <View style={[styles.playerTopBar, { paddingTop: insets.top + 10 }]}>
+             <TouchableOpacity style={styles.closePlayerBtn} onPress={() => setPreviewVideo(null)}>
+               <Text style={styles.closePlayerBtnText}>✕ Close Preview</Text>
+             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </AppBackground>
   );
 }
@@ -350,12 +385,27 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: Theme.colors.error,
   },
+  pathRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
   recordingPath: {
+    flex: 1,
     color: Theme.colors.secondary,
     opacity: 0.6,
     fontSize: 11,
-    marginTop: 4,
     fontFamily: Theme.fonts.regular,
+    paddingRight: 12,
+  },
+  previewPlayBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Theme.colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardActions: {
     flexDirection: 'row',
@@ -472,5 +522,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: Theme.fonts.semiBold,
     fontSize: 16,
+  },
+
+  // Modal Player Styles
+  playerContainer: {
+    flex: 1, 
+    backgroundColor: '#000',
+  },
+  fullScreenVideo: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  playerTopBar: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'flex-end',
+    zIndex: 10,
+  },
+  closePlayerBtn: {
+    backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 20,
+  },
+  closePlayerBtnText: {
+    color: '#FFF', fontFamily: Theme.fonts.semiBold, fontSize: 14,
   },
 });

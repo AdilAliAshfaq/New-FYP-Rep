@@ -18,6 +18,8 @@ export default function SettingsScreen() {
   const { settings, updateSettings } = useScripts();
   const insets = useSafeAreaInsets();
 
+  const currentTimer = settings.countdownTimer !== undefined ? settings.countdownTimer : 3;
+
   return (
     <AppBackground>
       <SafeAreaView style={styles.container}>
@@ -55,7 +57,7 @@ export default function SettingsScreen() {
               </View>
             </View>
 
-            <View style={[styles.row, styles.lastRow]}>
+            <View style={styles.row}>
               <Text style={styles.rowLabel}>Camera Height</Text>
               <View style={styles.sliderRow}>
                 <Slider
@@ -72,6 +74,32 @@ export default function SettingsScreen() {
                 <Text style={styles.sliderVal}>
                   {Math.round(settings.cameraRatio * 100)}%
                 </Text>
+              </View>
+            </View>
+
+            <View style={[styles.row, styles.lastRow]}>
+              <Text style={styles.rowLabel}>Countdown</Text>
+              <View style={styles.segmented}>
+                {[0, 3, 5, 7, 10].map(val => (
+                  <TouchableOpacity
+                    key={val}
+                    style={[
+                      styles.segment,
+                      { paddingHorizontal: 12 }, 
+                      currentTimer === val && styles.segmentActive,
+                    ]}
+                    onPress={() => updateSettings({ countdownTimer: val })}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        currentTimer === val && styles.segmentTextActive,
+                      ]}
+                    >
+                      {val === 0 ? 'Off' : `${val}s`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
 
@@ -262,6 +290,8 @@ const styles = StyleSheet.create({
   segment: {
     paddingHorizontal: 14,
     paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   segmentActive: {
     backgroundColor: Theme.colors.primary,

@@ -36,6 +36,8 @@ function toLocale(langCode) {
 
 const PROMPTER_BG = '#1A1A2E';
 
+const TIMER_OPTIONS = [0, 3, 5, 7, 10]; 
+
 function normalizeWord(w) {
   return w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '').trim();
 }
@@ -44,71 +46,26 @@ function tokenize(text) {
   return text.split(/\s+/).map(normalizeWord).filter(Boolean);
 }
 
-function buildPagesFromScript(content) {
-  const raw = content.split(/(\s+)/);
-  const items = [];
-  let wordIdx = 0;
-  raw.forEach(chunk => {
-    if (/^\s+$/.test(chunk)) {
-      items.push({ type: 'space', text: chunk });
-    } else if (chunk.length > 0) {
-      items.push({
-        type: 'word',
-        text: chunk,
-        normalized: normalizeWord(chunk),
-        globalIndex: wordIdx,
-      });
-      wordIdx++;
-    }
-  });
-  const totalWords = wordIdx;
-
-  const TARGET_PAGES = 6;
-  const MIN = 20, MAX = 80;
-  let wordsPerPage = Math.ceil(totalWords / TARGET_PAGES);
-  if (wordsPerPage < MIN) wordsPerPage = MIN;
-  if (wordsPerPage > MAX) wordsPerPage = MAX;
-  const totalPages = Math.max(1, Math.ceil(totalWords / wordsPerPage));
-
-  const pages = [];
-  for (let p = 0; p < totalPages; p++) pages.push({ items: [], firstWord: -1, lastWord: -1 });
-
-  let currentPage = 0;
-  items.forEach(item => {
-    if (item.type === 'word') {
-      const pageNum = Math.floor(item.globalIndex / wordsPerPage);
-      currentPage = pageNum;
-      if (pages[pageNum].firstWord === -1) pages[pageNum].firstWord = item.globalIndex;
-      pages[pageNum].lastWord = item.globalIndex;
-      pages[pageNum].items.push(item);
-    } else {
-      if (pages[currentPage]) pages[currentPage].items.push(item);
-    }
-  });
-
-  const normalizedWords = new Array(totalWords);
-  items.forEach(it => {
-    if (it.type === 'word') normalizedWords[it.globalIndex] = it.normalized;
-  });
-
-  return { pages, totalPages, totalWords, normalizedWords, wordsPerPage };
-}
-
 export default function TeleprompterScreen({ navigation, route }) {
-  const { getScript, settings, addRecording } = useScripts();
+  const { getScript, settings, updateSettings, addRecording } = useScripts();
   const script = getScript(route.params.scriptId);
   const insets = useSafeAreaInsets();
 
   const [mode, setMode] = useState('scroll');
-  const [playState, setPlayState] = useState('idle');
+  const [playState, setPlayState] = useState('idle'); 
   const [isRecording, setIsRecording] = useState(false);
   const [cameraPosition, setCameraPosition] = useState(settings.cameraPosition);
   const [recognizing, setRecognizing] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
+  
+  // ── Global Timer State ──
+  const currentTimer = settings.countdownTimer !== undefined ? settings.countdownTimer : 3;
+  const [countdown, setCountdown] = useState(0);
 
-  const [currentPageIdx, setCurrentPageIdx] = useState(0);
+  // ── Layout & Tracking State ──
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [wordToLineMap, setWordToLineMap] = useState([]); 
+  const currentLineIdxRef = useRef(-1);
   const [highlightedWordIdx, setHighlightedWordIdx] = useState(-1);
-  const [debugLines, setDebugLines] = useState([]);
 
   const [langPackState, setLangPackState] = useState('idle');
   const [langPackInfo, setLangPackInfo] = useState(null);
@@ -141,12 +98,10 @@ export default function TeleprompterScreen({ navigation, route }) {
   const pointerRef = useRef(0);
   const cumulativeFinalRef = useRef('');
   const totalSpokenLockedRef = useRef(0);
-  const currentPageIdxRef = useRef(0);
   const confirmedPointerRef = useRef(0);
 
-  // Tracks whether we've actually called SpeechRecognition.start() natively
   const nativeStartedRef = useRef(false);
-
+  const isInitialPlayRef = useRef(true); 
   const recordingStartTimeRef = useRef(null);
   const MIN_RECORDING_MS = 1500;
 
@@ -154,72 +109,96 @@ export default function TeleprompterScreen({ navigation, route }) {
   const isRTL = script ? ['ar', 'ur'].includes(script.language) : false;
   const scriptLocale = toLocale(script?.language);
 
-  const pagesData = useMemo(
-    () => script
-      ? buildPagesFromScript(script.content)
-      : { pages: [], totalPages: 0, totalWords: 0, normalizedWords: [] },
-    [script],
-  );
-
-  useEffect(() => {
-    currentPageIdxRef.current = currentPageIdx;
-  }, [currentPageIdx]);
-
-  const addDebug = useCallback((msg, isErr = false) => {
-    setDebugLines(prev => [...prev, { msg, isErr, ts: Date.now() }].slice(-5));
-    console.log('[SPEECH]', msg);
-  }, []);
-
-  // ── Language pack check ────────────────────────────────────────────────
-  useEffect(() => {
-    if (mode !== 'voice') {
-      setLangPackState('idle');
-      return;
-    }
-    if (langPackState !== 'idle') return;
-    (async () => {
-      setLangPackState('checking');
-      try {
-        const info = await SpeechRecognition.checkLanguagePack(scriptLocale);
-        setLangPackInfo(info);
-        addDebug('Pack: ' + info.status);
-        if (info.status === 'installed') setLangPackState('installed');
-        else if (info.status === 'available-to-download') setLangPackState('needs-download');
-        else setLangPackState('unsupported');
-      } catch (e) {
-        addDebug('Pack error: ' + e.message, true);
-        setLangPackState('unsupported');
-      }
-    })();
-  }, [mode, scriptLocale, langPackState, addDebug]);
-
-  async function handleDownloadLanguagePack() {
-    setLangPackState('downloading');
-    try {
-      const result = await SpeechRecognition.downloadLanguagePack(scriptLocale);
-      addDebug('DL: ' + result.status);
-      if (result.status === 'downloaded' || result.status === 'scheduled') {
-        setTimeout(async () => {
-          const info = await SpeechRecognition.checkLanguagePack(scriptLocale);
-          setLangPackInfo(info);
-          setLangPackState(info.status === 'installed' ? 'installed' : 'needs-download');
-        }, 1500);
-      } else {
-        setLangPackState('failed');
-      }
-    } catch (e) {
-      addDebug('DL failed: ' + e.message, true);
-      setLangPackState('failed');
-    }
+  function cycleTimer() {
+    const idx = TIMER_OPTIONS.indexOf(currentTimer);
+    const nextIdx = (idx + 1) % TIMER_OPTIONS.length;
+    updateSettings({ countdownTimer: TIMER_OPTIONS[nextIdx] });
   }
 
-  // ── Matching algorithm ────────────────────────────────────────────────
-  function matchWords(spokenWords, startPointer, allowRevert) {
-    const { normalizedWords, totalWords } = pagesData;
-    const LOOKAHEAD = 3;
-    const MIN_PREFIX_LEN = 4;
+  // ── Countdown Timer Logic ──
+  useEffect(() => {
+    if (playState === 'counting_down' && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (playState === 'counting_down' && countdown === 0) {
+      executePlay();
+    }
+  }, [playState, countdown]);
 
+  function executePlay() {
+    if (playState === 'finished') {
+      scrollY.current = 0;
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      if (mode === 'voice') resetVoiceState();
+    }
+    recordingStartTimeRef.current = Date.now();
+    setIsRecording(true);
+    isInitialPlayRef.current = true; 
+    setPlayState('playing');
+  }
+
+  // ── 1. Create Logical Array for Strict Matching ──────────────────────
+  const wordsData = useMemo(() => {
+    if (!script) return { items: [], totalWords: 0, normalizedWords: [] };
+    const raw = script.content.split(/(\s+)/);
+    const items = [];
+    const normalizedWords = [];
+    let wordIdx = 0;
+
+    raw.forEach(chunk => {
+      if (/^\s+$/.test(chunk)) {
+        items.push({ type: 'space', text: chunk, wordIdx: wordIdx });
+      } else if (chunk.length > 0) {
+        const norm = normalizeWord(chunk);
+        items.push({ type: 'word', text: chunk, normalized: norm, wordIdx: wordIdx });
+        normalizedWords.push(norm);
+        wordIdx++;
+      }
+    });
+    return { items, totalWords: wordIdx, normalizedWords };
+  }, [script]);
+
+  useEffect(() => {
+    setLayoutReady(false);
+    setWordToLineMap([]);
+    currentLineIdxRef.current = -1;
+  }, [script?.content, settings.fontSize, settings.textAlign, settings.mirrorText]);
+
+  // ── 2. The Bulletproof Layout Measurer ───────────────────────────────
+  const handleTextLayout = useCallback((e) => {
+    if (layoutReady) return;
+    const lines = e.nativeEvent.lines;
+    const map = [];
+    let wordCounter = 0;
+    
+    lines.forEach((line, lineIdx) => {
+      const wordsInLine = line.text.split(/\s+/).filter(Boolean).length;
+      for (let i = 0; i < wordsInLine; i++) {
+        map[wordCounter++] = { lineIdx, y: line.y };
+      }
+    });
+    
+    setWordToLineMap(map);
+    setLayoutReady(true);
+  }, [layoutReady]);
+
+  // ── 3. Strict Top-Line Snapping ──────────────────────────────────────
+  useEffect(() => {
+    if (mode === 'voice' && highlightedWordIdx >= 0 && scrollRef.current && layoutReady) {
+      const lineInfo = wordToLineMap[highlightedWordIdx];
+      
+      if (lineInfo && lineInfo.lineIdx !== currentLineIdxRef.current) {
+        currentLineIdxRef.current = lineInfo.lineIdx;
+        scrollRef.current.scrollTo({ y: Math.max(0, lineInfo.y), animated: true });
+      }
+    }
+  }, [highlightedWordIdx, mode, wordToLineMap, layoutReady]);
+
+  // ── 4. Strict Matching Algorithm ───────────────────────────────────────
+  function matchWords(spokenWords, startPointer, allowRevert) {
+    const { normalizedWords, totalWords } = wordsData;
     let pointer = startPointer;
+    
     if (allowRevert && pointer > confirmedPointerRef.current) {
       pointer = confirmedPointerRef.current;
     }
@@ -229,26 +208,19 @@ export default function TeleprompterScreen({ navigation, route }) {
       if (!w || w.length < 1) continue;
 
       let found = -1;
-      const limit = Math.min(pointer + LOOKAHEAD, totalWords);
+      const limit = Math.min(pointer + 3, totalWords); 
 
       for (let j = pointer; j < limit; j++) {
         if (normalizedWords[j] === w) {
-          found = j;
-          break;
+          if (j === pointer || (j === pointer + 1 && w.length >= 3) || (j === pointer + 2 && w.length >= 5)) {
+            found = j;
+            break;
+          }
         }
       }
 
-      if (found < 0 && w.length >= MIN_PREFIX_LEN) {
-        for (let j = pointer; j < limit; j++) {
-          const scriptWord = normalizedWords[j];
-          if (scriptWord && scriptWord.length >= MIN_PREFIX_LEN) {
-            if (scriptWord.startsWith(w.slice(0, MIN_PREFIX_LEN)) ||
-                w.startsWith(scriptWord.slice(0, MIN_PREFIX_LEN))) {
-              found = j;
-              break;
-            }
-          }
-        }
+      if (found < 0 && w.length >= 4 && normalizedWords[pointer] && normalizedWords[pointer].startsWith(w)) {
+        found = pointer;
       }
 
       if (found >= 0) {
@@ -268,7 +240,6 @@ export default function TeleprompterScreen({ navigation, route }) {
         pointerRef.current = newPointer;
         confirmedPointerRef.current = newPointer;
         setHighlightedWordIdx(newPointer - 1);
-        maybeAdvancePage(newPointer - 1);
       } else {
         confirmedPointerRef.current = pointerRef.current;
       }
@@ -277,73 +248,121 @@ export default function TeleprompterScreen({ navigation, route }) {
       if (tentativePointer > pointerRef.current) {
         pointerRef.current = tentativePointer;
         setHighlightedWordIdx(tentativePointer - 1);
-        maybeAdvancePage(tentativePointer - 1);
       }
     }
-  }, [pagesData]);
+  }, [wordsData]);
 
-  function maybeAdvancePage(newHighlight) {
-    const { pages, totalPages } = pagesData;
-    const pageIdx = currentPageIdxRef.current;
-    const currentPage = pages[pageIdx];
-    if (currentPage && newHighlight >= currentPage.lastWord && pageIdx < totalPages - 1) {
-      setTimeout(() => {
-        setCurrentPageIdx(prev => {
-          const next = Math.min(prev + 1, totalPages - 1);
-          currentPageIdxRef.current = next;
-          return next;
-        });
-      }, 500);
+  // ── 5. High-Speed Text Slicer ──────────────────────────────────────────
+  const { spokenText, currentText, upcomingText } = useMemo(() => {
+    let spoken = '';
+    let current = '';
+    let upcoming = '';
+
+    wordsData.items.forEach(item => {
+      if (item.type === 'space') {
+        const prevWordIdx = item.wordIdx - 1;
+        if (prevWordIdx < highlightedWordIdx) {
+          spoken += item.text;
+        } else {
+          upcoming += item.text;
+        }
+      } else if (item.wordIdx < highlightedWordIdx) {
+        spoken += item.text;
+      } else if (item.wordIdx === highlightedWordIdx) {
+        current += item.text;
+      } else {
+        upcoming += item.text;
+      }
+    });
+
+    return { spokenText: spoken, currentText: current, upcomingText: upcoming };
+  }, [wordsData, highlightedWordIdx]);
+
+  // ── Language pack checks ───────────────────────────────────────────────
+  useEffect(() => {
+    if (mode !== 'voice') {
+      setLangPackState('idle');
+      return;
+    }
+    if (langPackState !== 'idle') return;
+    (async () => {
+      setLangPackState('checking');
+      try {
+        const info = await SpeechRecognition.checkLanguagePack(scriptLocale);
+        setLangPackInfo(info);
+        if (info.status === 'installed') setLangPackState('installed');
+        else if (info.status === 'available-to-download') setLangPackState('needs-download');
+        else setLangPackState('unsupported');
+      } catch (e) {
+        setLangPackState('unsupported');
+      }
+    })();
+  }, [mode, scriptLocale, langPackState]);
+
+  async function handleDownloadLanguagePack() {
+    setLangPackState('downloading');
+    try {
+      const result = await SpeechRecognition.downloadLanguagePack(scriptLocale);
+      if (result.status === 'downloaded' || result.status === 'scheduled') {
+        setTimeout(async () => {
+          const info = await SpeechRecognition.checkLanguagePack(scriptLocale);
+          setLangPackInfo(info);
+          setLangPackState(info.status === 'installed' ? 'installed' : 'needs-download');
+        }, 1500);
+      } else {
+        setLangPackState('failed');
+      }
+    } catch (e) {
+      setLangPackState('failed');
     }
   }
 
   // ── Speech listeners ───────────────────────────────────────────────────
   useEffect(() => {
-    const unsubStart  = SpeechRecognition.addListener('start',  () => { setRecognizing(true);  addDebug('● Listening'); });
-    const unsubEnd    = SpeechRecognition.addListener('end',    () => { setRecognizing(false); addDebug('◼ Ended'); });
-    const unsubError  = SpeechRecognition.addListener('error',  ev  => { addDebug('ERR: ' + ev?.error, true); });
-    const unsubLog    = SpeechRecognition.addListener('log',    ev  => { addDebug(ev?.message || ''); });
+    const unsubStart  = SpeechRecognition.addListener('start',  () => setRecognizing(true));
+    const unsubEnd    = SpeechRecognition.addListener('end',    () => setRecognizing(false));
     const unsubResult = SpeechRecognition.addListener('result', ev  => {
       if (!ev?.transcript) return;
       if (ev.isFinal) {
-        addDebug('✓ ' + ev.transcript.slice(0, 30));
         cumulativeFinalRef.current += ev.transcript + ' ';
         const allWords = tokenize(cumulativeFinalRef.current);
         const newWords = allWords.slice(totalSpokenLockedRef.current);
         totalSpokenLockedRef.current = allWords.length;
         if (newWords.length > 0) applyMatch(newWords.join(' '), true);
       } else {
-        addDebug('~ ' + ev.transcript.slice(0, 25));
         applyMatch(ev.transcript, false);
       }
     });
-    return () => { unsubStart(); unsubEnd(); unsubResult(); unsubError(); unsubLog(); };
-  }, [applyMatch, addDebug]);
+    return () => { unsubStart(); unsubEnd(); unsubResult(); };
+  }, [applyMatch]);
 
   async function startRecognition() {
     const granted = await SpeechRecognition.requestMicPermission();
-    if (!granted) { addDebug('Mic denied', true); return; }
+    if (!granted) return;
     try {
-      await SpeechRecognition.start({ lang: scriptLocale, onDevice: true });
-      addDebug('start() OK');
-    } catch (err) {
-      addDebug('start() err: ' + err.message, true);
-    }
+      await SpeechRecognition.start({ 
+        lang: scriptLocale, 
+        onDevice: true,
+        playSound: isInitialPlayRef.current 
+      });
+      isInitialPlayRef.current = false; 
+    } catch (err) {}
   }
 
   function stopRecognition() {
     SpeechRecognition.stop().catch(() => {});
   }
 
-  // ── Scroll loop ─────────────────────────────────────────────────────────
+  // ── Scroll loop (For Manual Scroll Mode) ────────────────────────────────
   const startScrollLoop = useCallback(() => {
     function animate(timestamp) {
       if (lastTimeRef.current === null) lastTimeRef.current = timestamp;
       const delta = timestamp - lastTimeRef.current;
       lastTimeRef.current = timestamp;
       scrollY.current += (settings.scrollSpeed / 1000) * delta;
+      
       const maxScroll = contentHeight.current - scrollViewHeight.current;
-      if (scrollY.current >= maxScroll) {
+      if (scrollY.current >= maxScroll && maxScroll > 0) {
         scrollY.current = maxScroll;
         setPlayState('finished');
         return;
@@ -365,12 +384,8 @@ export default function TeleprompterScreen({ navigation, route }) {
     return stopScrollLoop;
   }, [playState, startScrollLoop, mode]);
 
-  // ── Voice lifecycle — only start/stop on actual state transitions ────
   useEffect(() => {
-    const shouldBeListening =
-      mode === 'voice' &&
-      langPackState === 'installed' &&
-      playState === 'playing';
+    const shouldBeListening = mode === 'voice' && langPackState === 'installed' && playState === 'playing';
 
     if (shouldBeListening && !nativeStartedRef.current) {
       nativeStartedRef.current = true;
@@ -389,12 +404,10 @@ export default function TeleprompterScreen({ navigation, route }) {
     confirmedPointerRef.current = 0;
     cumulativeFinalRef.current = '';
     totalSpokenLockedRef.current = 0;
-    currentPageIdxRef.current = 0;
+    currentLineIdxRef.current = -1;
     setHighlightedWordIdx(-1);
-    setCurrentPageIdx(0);
   }
 
-  // ── Buttons ─────────────────────────────────────────────────────────────
   function safeStopRecording() {
     if (!isRecording) return;
     const elapsed = Date.now() - (recordingStartTimeRef.current ?? 0);
@@ -404,19 +417,24 @@ export default function TeleprompterScreen({ navigation, route }) {
 
   function handleMainButton() {
     if (mode === 'voice' && langPackState !== 'installed') return;
-    if (playState === 'idle' || playState === 'paused') {
-      if (!isRecording) { recordingStartTimeRef.current = Date.now(); setIsRecording(true); }
-      setPlayState('playing');
+    
+    if (playState === 'counting_down') {
+      setPlayState('idle');
+      setCountdown(0);
+      return;
+    }
+
+    if (playState === 'idle' || playState === 'paused' || playState === 'finished') {
+      const startDelay = currentTimer;
+      if (startDelay > 0) {
+        setCountdown(startDelay);
+        setPlayState('counting_down');
+      } else {
+        executePlay();
+      }
     } else if (playState === 'playing') {
       setPlayState('paused');
       safeStopRecording();
-    } else if (playState === 'finished') {
-      scrollY.current = 0;
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
-      if (mode === 'voice') resetVoiceState();
-      recordingStartTimeRef.current = Date.now();
-      setIsRecording(true);
-      setPlayState('playing');
     }
   }
 
@@ -428,6 +446,7 @@ export default function TeleprompterScreen({ navigation, route }) {
     scrollRef.current?.scrollTo({ y: 0, animated: true });
     resetVoiceState();
     setPlayState('idle');
+    setCountdown(0);
     safeStopRecording();
   }
 
@@ -442,12 +461,12 @@ export default function TeleprompterScreen({ navigation, route }) {
   }
 
   function getMainButtonIcon() {
+    if (playState === 'counting_down') return <Icon name="pause" size={36} color={Theme.colors.primary} />;
     if (playState === 'playing') return <Icon name="pause" size={36} color={Theme.colors.primary} />;
     if (playState === 'finished') return <Icon name="replay" size={32} color="#FFFFFF" />;
     return <Icon name="play" size={36} color="#FFFFFF" />;
   }
 
-  // ── Guards ─────────────────────────────────────────────────────────────
   if (!script) {
     return (
       <View style={styles.errorContainer}>
@@ -482,15 +501,11 @@ export default function TeleprompterScreen({ navigation, route }) {
     );
   }
 
-  const currentPage = pagesData.pages[currentPageIdx];
-  const cameraAudioEnabled = true;
-
   function renderLangPackOverlay() {
     if (langPackState === 'installed' || langPackState === 'idle') return null;
     let title = '', message = '', action = null;
     if (langPackState === 'checking') {
       title = 'Checking language support…';
-      message = 'Looking for on-device model for ' + scriptLocale;
       action = <ActivityIndicator size="large" color={Theme.colors.primary} />;
     } else if (langPackState === 'needs-download') {
       title = 'Language pack required';
@@ -502,7 +517,6 @@ export default function TeleprompterScreen({ navigation, route }) {
       );
     } else if (langPackState === 'downloading') {
       title = 'Downloading…';
-      message = 'Installing the language pack.';
       action = <ActivityIndicator size="large" color={Theme.colors.primary} />;
     } else if (langPackState === 'failed') {
       title = 'Download failed';
@@ -530,16 +544,28 @@ export default function TeleprompterScreen({ navigation, route }) {
     );
   }
 
+  const commonTextStyles = {
+    fontSize: settings.fontSize,
+    textAlign: settings.textAlign,
+    writingDirection: isRTL ? 'rtl' : 'ltr',
+    transform: settings.mirrorText ? [{ scaleX: -1 }] : [],
+    lineHeight: settings.fontSize * 1.6,
+    fontFamily: Theme.fonts.medium,
+    color: '#FFFFFF',
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar hidden />
 
-      <View style={[styles.cameraSection, { height: cameraHeight }]}>
+      <View style={[styles.cameraSection, { height: cameraHeight, backgroundColor: '#000' }]}>
+        
+        {/* Camera stays permanently at 100% opacity so the hardware surface doesn't crash/flicker */}
         <CameraView
           height={cameraHeight}
           cameraPosition={cameraPosition}
           isRecording={isRecording}
-          audioEnabled={cameraAudioEnabled}
+          audioEnabled={true}
           onRecordingStart={() => { recordingStartTimeRef.current = Date.now(); }}
           onRecordingStop={async (video) => {
             setIsRecording(false);
@@ -552,6 +578,13 @@ export default function TeleprompterScreen({ navigation, route }) {
             }
           }}
         />
+
+        {/* Timer overlay WITH the 60% black dimming background built-in */}
+        {playState === 'counting_down' && countdown > 0 && (
+          <View style={styles.countdownCameraOverlay}>
+            <Text style={styles.countdownTextGiant}>{countdown}</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.divider}>
@@ -559,111 +592,51 @@ export default function TeleprompterScreen({ navigation, route }) {
       </View>
 
       <View style={styles.prompterSection}>
-        {mode === 'scroll' ? (
-          <ScrollView
-            ref={scrollRef}
-            style={{ flex: 1 }}
-            scrollEnabled={playState !== 'playing'}
-            showsVerticalScrollIndicator={false}
-            onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
-            onContentSizeChange={(_, h) => { contentHeight.current = h; }}
-            onLayout={e => { scrollViewHeight.current = e.nativeEvent.layout.height; }}
-            scrollEventThrottle={16}
-            contentContainerStyle={styles.prompterContent}
-          >
-            <Text
-              style={[
-                styles.scriptText,
-                {
-                  fontSize: settings.fontSize,
-                  color: settings.fontColor || '#FFFFFF',
-                  textAlign: settings.textAlign,
-                  writingDirection: isRTL ? 'rtl' : 'ltr',
-                  transform: settings.mirrorText ? [{ scaleX: -1 }] : [],
-                  lineHeight: settings.fontSize * 1.6,
-                },
-              ]}
+        
+        {/* PASS 1: The Ghost Render */}
+        {!layoutReady && (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.prompterContent}>
+             <Text 
+              onTextLayout={handleTextLayout} 
+              style={[commonTextStyles, { color: 'transparent' }]}
             >
               {script.content}
             </Text>
-            <View style={{ height: 300 }} />
           </ScrollView>
-        ) : (
-          <View style={{ flex: 1 }}>
-            {langPackState === 'installed' ? (
-              <>
-                <View style={styles.pageIndicator}>
-                  <Text style={styles.pageIndicatorText}>
-                    Page {currentPageIdx + 1} / {pagesData.totalPages}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.debugToggle}
-                    onPress={() => setShowDebug(s => !s)}
-                  >
-                    <Text style={styles.debugToggleText}>
-                      {showDebug ? '▼ debug' : '▲ debug'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.pageContent}>
-                  <Text
-                    style={{
-                      fontSize: settings.fontSize,
-                      textAlign: settings.textAlign,
-                      writingDirection: isRTL ? 'rtl' : 'ltr',
-                      transform: settings.mirrorText ? [{ scaleX: -1 }] : [],
-                      lineHeight: settings.fontSize * 1.6,
-                      fontFamily: Theme.fonts.medium,
-                    }}
-                  >
-                    {currentPage?.items.map((item, idx) => {
-                      if (item.type === 'space') {
-                        return <Text key={`sp-${idx}`} style={{ color: '#FFFFFF' }}>{item.text}</Text>;
-                      }
-                      const isSpoken  = item.globalIndex <= highlightedWordIdx;
-                      const isCurrent = item.globalIndex === highlightedWordIdx;
-                      return (
-                        <Text
-                          key={`w-${item.globalIndex}`}
-                          style={{
-                            color: isSpoken ? Theme.colors.primary : '#FFFFFF',
-                            opacity: isSpoken ? 1 : 0.4,
-                            fontFamily: isCurrent ? Theme.fonts.semiBold : Theme.fonts.medium,
-                          }}
-                        >
-                          {item.text}
-                        </Text>
-                      );
-                    })}
-                  </Text>
-                </View>
-
-                {showDebug && (
-                  <View style={styles.debugBox}>
-                    <Text style={styles.debugTitle}>
-                      ptr:{pointerRef.current} cf:{confirmedPointerRef.current} hi:{highlightedWordIdx} {recognizing ? '🎙' : '○'}
-                    </Text>
-                    {debugLines.map((line, idx) => (
-                      <Text
-                        key={idx}
-                        style={[styles.debugLine, line.isErr && styles.debugLineErr]}
-                        numberOfLines={1}
-                      >
-                        {line.msg}
-                      </Text>
-                    ))}
-                  </View>
-                )}
-              </>
-            ) : (
-              renderLangPackOverlay()
-            )}
-          </View>
         )}
+
+        {/* PASS 2: The Real UI */}
+        {layoutReady && (
+          <ScrollView
+            ref={scrollRef}
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={(_, h) => { contentHeight.current = h; }}
+            onLayout={e => { scrollViewHeight.current = e.nativeEvent.layout.height; }}
+            contentContainerStyle={styles.prompterContent}
+            scrollEnabled={playState !== 'playing' && playState !== 'counting_down'}
+          >
+            <Text style={commonTextStyles}>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                {spokenText}
+              </Text>
+              
+              <Text style={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                {currentText}
+              </Text>
+              
+              <Text style={{ color: '#FFFFFF' }}>
+                {upcomingText}
+              </Text>
+            </Text>
+            
+            <View style={{ height: SCREEN_HEIGHT }} />
+          </ScrollView>
+        )}
+
+        {mode === 'voice' && langPackState !== 'installed' && renderLangPackOverlay()}
       </View>
 
-      {/* ── Floating controls — ALWAYS VISIBLE ──────────────────── */}
       <View style={styles.controlsOverlay} pointerEvents="box-none">
         <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity style={styles.closeBtn} onPress={() => navigation.goBack()}>
@@ -693,12 +666,23 @@ export default function TeleprompterScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
-          {mode === 'voice' && recognizing && (
-            <View style={styles.listeningPill}>
-              <View style={styles.listeningDot} />
-              <Text style={styles.listeningText}>Listening…</Text>
-            </View>
-          )}
+          <View style={styles.quickInfoRow}>
+             <TouchableOpacity 
+              style={styles.timerToggleBtn} 
+              onPress={cycleTimer}
+            >
+              <Text style={styles.timerToggleText}>
+                ⏱ {currentTimer === 0 ? 'Off' : `${currentTimer}s`}
+              </Text>
+            </TouchableOpacity>
+
+            {mode === 'voice' && recognizing && (
+              <View style={styles.listeningPill}>
+                <View style={styles.listeningDot} />
+                <Text style={styles.listeningText}>Listening…</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.playbackRow}>
             <TouchableOpacity style={styles.sideBtn} onPress={handleReset}>
@@ -709,7 +693,7 @@ export default function TeleprompterScreen({ navigation, route }) {
               style={[
                 styles.playBtn,
                 isRecording && styles.playBtnRecording,
-                playState === 'playing' && styles.playBtnActive,
+                (playState === 'playing' || playState === 'counting_down') && styles.playBtnActive,
                 (mode === 'voice' && langPackState !== 'installed') && styles.playBtnDisabled,
               ]}
               onPress={handleMainButton}
@@ -768,46 +752,28 @@ const styles = StyleSheet.create({
   },
 
   prompterSection: { flex: 1, overflow: 'hidden', backgroundColor: PROMPTER_BG },
-  prompterContent: { paddingHorizontal: 28, paddingTop: 4 },
-  scriptText: { fontFamily: Theme.fonts.medium },
+  prompterContent: { paddingHorizontal: 28, paddingTop: 20 }, 
 
-  pageIndicator: {
-    paddingTop: 6, paddingHorizontal: 20, paddingBottom: 4,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  pageIndicatorText: {
-    color: Theme.colors.primary, fontFamily: Theme.fonts.semiBold,
-    fontSize: 13, letterSpacing: 0.5, opacity: 0.85,
-  },
-  debugToggle: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  debugToggleText: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontFamily: 'monospace' },
-  pageContent: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 0,
-    paddingBottom: 240,
+  countdownCameraOverlay: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)', 
+    zIndex: 20,
   },
-  debugBox: {
-    position: 'absolute', bottom: 240, left: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.88)',
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
-    maxHeight: 100,
+  countdownTextGiant: {
+    color: Theme.colors.primary,
+    fontSize: 140,
+    fontFamily: Theme.fonts.bold,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 15,
   },
-  debugTitle: {
-    color: Theme.colors.primary, fontSize: 10,
-    fontFamily: Theme.fonts.semiBold, marginBottom: 2,
-  },
-  debugLine: { color: '#FFFFFF', fontSize: 9, lineHeight: 12 },
-  debugLineErr: { color: '#ff6b6b' },
 
   langOverlay: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32,
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32,
+    backgroundColor: PROMPTER_BG, zIndex: 10
   },
   langTitle: {
     color: Theme.colors.primary, fontFamily: Theme.fonts.semiBold,
@@ -861,14 +827,34 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)', fontFamily: Theme.fonts.medium, fontSize: 13,
   },
   modeBtnTextActive: { color: '#FFFFFF', fontFamily: Theme.fonts.semiBold },
+  
+  quickInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    gap: 12,
+  },
+  timerToggleBtn: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  timerToggleText: {
+    color: '#FFFFFF',
+    fontFamily: Theme.fonts.medium,
+    fontSize: 12,
+  },
   listeningPill: {
-    flexDirection: 'row', alignItems: 'center', alignSelf: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(94, 23, 235, 0.3)',
     paddingHorizontal: 12, paddingVertical: 5,
-    borderRadius: 12, marginBottom: 10, gap: 6,
+    borderRadius: 12, gap: 6,
   },
   listeningDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Theme.colors.primary },
   listeningText: { color: '#FFFFFF', fontFamily: Theme.fonts.medium, fontSize: 12 },
+  
   playbackRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24,
   },
