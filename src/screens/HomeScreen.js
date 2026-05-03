@@ -10,6 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
+import Share from 'react-native-share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
 import AppBackground from '../components/AppBackground';
@@ -74,6 +75,25 @@ export default function HomeScreen({ navigation }) {
     }
   }
 
+  // Native File Sharing Function
+  async function handleShareRecording(recording) {
+    try {
+      const videoPath = recording.path.startsWith('file://')
+        ? recording.path
+        : `file://${recording.path}`;
+
+      await Share.open({
+        url: videoPath,
+        type: 'video/mp4',
+        title: 'Share Recording',
+      });
+    } catch (error) {
+      if (error.message !== 'User did not share') {
+        console.log('Share error:', error);
+      }
+    }
+  }
+
   function formatDuration(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
@@ -133,25 +153,39 @@ export default function HomeScreen({ navigation }) {
     return (
       <View style={styles.card}>
         <View style={styles.cardContent}>
-          <View style={styles.recordingHeader}>
-            <View style={styles.recDot} />
-            <Text style={styles.cardTitle} numberOfLines={1}>{item.scriptTitle}</Text>
-          </View>
-          <Text style={styles.cardMeta}>
-            {formatDate(item.createdAt)} · {formatDuration(item.duration)}
-          </Text>
-          
-          {/* Exactly where you circled: Path on the left, Play button on the right */}
-          <View style={styles.pathRow}>
-            <Text style={styles.recordingPath} numberOfLines={1}>{item.path}</Text>
-            <TouchableOpacity 
-              style={styles.previewPlayBtn}
-              onPress={() => setPreviewVideo(item.path)}
-            >
-              <Icon name="play" size={14} color={Theme.colors.primary} />
-            </TouchableOpacity>
-          </View>
+          <View style={styles.recordingHeaderRow}>
+            {/* Left Side: Title and Date */}
+            <View style={{ flex: 1, paddingRight: 16 }}>
+              <View style={styles.recordingHeader}>
+                <View style={styles.recDot} />
+                <Text style={styles.cardTitle} numberOfLines={1}>{item.scriptTitle}</Text>
+              </View>
+              <Text style={styles.cardMeta}>
+                {formatDate(item.createdAt)} · {formatDuration(item.duration)}
+              </Text>
+            </View>
+            
+            {/* Right Side: Play & Share Buttons */}
+            <View style={styles.quickActionRow}>
+              {/* Play Button */}
+              <TouchableOpacity 
+                style={styles.circleBtnPrimary}
+                onPress={() => setPreviewVideo(item.path)}
+              >
+                <Icon name="play" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
 
+              {/* Share Button (Now completely identical to the Play button) */}
+              <TouchableOpacity 
+                style={styles.circleBtnPrimary}
+                onPress={() => handleShareRecording(item)}
+              >
+                <Icon name="share" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          <Text style={styles.recordingPath} numberOfLines={1}>{item.path}</Text>
         </View>
 
         <View style={styles.cardActions}>
@@ -373,6 +407,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: Theme.fonts.regular,
   },
+  recordingHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
   recordingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,27 +424,29 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: Theme.colors.error,
   },
-  pathRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
   recordingPath: {
-    flex: 1,
     color: Theme.colors.secondary,
     opacity: 0.6,
     fontSize: 11,
     fontFamily: Theme.fonts.regular,
-    paddingRight: 12,
+    marginTop: 4,
   },
-  previewPlayBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Theme.colors.primaryLight,
+  quickActionRow: {
+    flexDirection: 'row',
+    gap: 12, // Increased gap slightly so the identical buttons have breathing room
+  },
+  circleBtnPrimary: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: Theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
   },
   cardActions: {
     flexDirection: 'row',

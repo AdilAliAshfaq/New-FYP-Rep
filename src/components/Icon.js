@@ -5,16 +5,19 @@ import { View } from 'react-native';
 import ReplayIcon from '../assets/icons/round-replay.svg';
 import SettingsIcon from '../assets/icons/settings-fill.svg';
 import PlayIcon from '../assets/icons/play-fill.svg';
-import PauseIcon from '../assets/icons/pause-fill.svg'; // <-- NEW PAUSE ICON
+import PauseIcon from '../assets/icons/pause-fill.svg';
 import FlipCameraIcon from '../assets/icons/baseline-flip-camera-android.svg';
+import ShareIcon from '../assets/icons/share.svg'; // <-- NEW SHARE ICON
+
 
 // Map simple string names to the imported SVG components
 const ICONS = {
   'replay': ReplayIcon,
   'settings': SettingsIcon,
   'play': PlayIcon,
-  'pause': PauseIcon, // <-- ADDED TO MAP
+  'pause': PauseIcon, 
   'flip-camera': FlipCameraIcon,
+  'share': ShareIcon, // <-- ADDED TO MAP
 };
 
 export default function Icon({ name, size = 24, color = '#000000', style }) {
