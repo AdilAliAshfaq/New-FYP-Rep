@@ -1,26 +1,24 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Dimensions,
-  StatusBar,
-  ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  Dimensions, StatusBar, ActivityIndicator, Image
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScripts } from '../context/ScriptContext';
-import CameraView from '../components/CameraView';
+import SmartCamera from '../components/SmartCamera'; 
 import Icon from '../components/Icon';
-import {
-  useCameraPermission,
-  useMicrophonePermission,
-} from 'react-native-vision-camera';
+import { useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 import { Theme } from '../theme/Theme';
 import SpeechRecognition from '../modules/SpeechRecognition';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// ── PREDEFINED BACKGROUNDS ──
+const BACKGROUNDS = [
+  { id: 'none', label: 'Real BG', source: null },
+  { id: 'office1', label: 'Office 1', source: require('../assets/backgrounds/office1.jpg') },
+  { id: 'office2', label: 'Office 2', source: require('../assets/backgrounds/office2.jpg') },
+];
 
 const LOCALE_MAP = {
   en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', it: 'it-IT',
@@ -35,16 +33,10 @@ function toLocale(langCode) {
 }
 
 const PROMPTER_BG = '#1A1A2E';
-
 const TIMER_OPTIONS = [0, 3, 5, 7, 10]; 
 
-function normalizeWord(w) {
-  return w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '').trim();
-}
-
-function tokenize(text) {
-  return text.split(/\s+/).map(normalizeWord).filter(Boolean);
-}
+function normalizeWord(w) { return w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '').trim(); }
+function tokenize(text) { return text.split(/\s+/).map(normalizeWord).filter(Boolean); }
 
 export default function TeleprompterScreen({ navigation, route }) {
   const { getScript, settings, updateSettings, addRecording } = useScripts();
@@ -57,11 +49,12 @@ export default function TeleprompterScreen({ navigation, route }) {
   const [cameraPosition, setCameraPosition] = useState(settings.cameraPosition);
   const [recognizing, setRecognizing] = useState(false);
   
-  // ── Global Timer State ──
+  const [activeBgIndex, setActiveBgIndex] = useState(0);
+  const [showBgPicker, setShowBgPicker] = useState(false);
+
   const currentTimer = settings.countdownTimer !== undefined ? settings.countdownTimer : 3;
   const [countdown, setCountdown] = useState(0);
 
-  // ── Layout & Tracking State ──
   const [layoutReady, setLayoutReady] = useState(false);
   const [wordToLineMap, setWordToLineMap] = useState([]); 
   const currentLineIdxRef = useRef(-1);
@@ -70,14 +63,8 @@ export default function TeleprompterScreen({ navigation, route }) {
   const [langPackState, setLangPackState] = useState('idle');
   const [langPackInfo, setLangPackInfo] = useState(null);
 
-  const {
-    hasPermission: hasCameraPermission,
-    requestPermission: requestCameraPermission,
-  } = useCameraPermission();
-  const {
-    hasPermission: hasMicPermission,
-    requestPermission: requestMicrophonePermission,
-  } = useMicrophonePermission();
+  const { hasPermission: hasCameraPermission, requestPermission: requestCameraPermission } = useCameraPermission();
+  const { hasPermission: hasMicPermission, requestPermission: requestMicrophonePermission } = useMicrophonePermission();
   const hasAllPermissions = hasCameraPermission && hasMicPermission;
 
   useEffect(() => {
@@ -115,7 +102,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     updateSettings({ countdownTimer: TIMER_OPTIONS[nextIdx] });
   }
 
-  // ── Countdown Timer Logic ──
   useEffect(() => {
     if (playState === 'counting_down' && countdown > 0) {
       const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
@@ -137,7 +123,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     setPlayState('playing');
   }
 
-  // ── 1. Create Logical Array for Strict Matching ──────────────────────
   const wordsData = useMemo(() => {
     if (!script) return { items: [], totalWords: 0, normalizedWords: [] };
     const raw = script.content.split(/(\s+)/);
@@ -164,7 +149,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     currentLineIdxRef.current = -1;
   }, [script?.content, settings.fontSize, settings.textAlign, settings.mirrorText]);
 
-  // ── 2. The Bulletproof Layout Measurer ───────────────────────────────
   const handleTextLayout = useCallback((e) => {
     if (layoutReady) return;
     const lines = e.nativeEvent.lines;
@@ -182,7 +166,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     setLayoutReady(true);
   }, [layoutReady]);
 
-  // ── 3. Strict Top-Line Snapping ──────────────────────────────────────
   useEffect(() => {
     if (mode === 'voice' && highlightedWordIdx >= 0 && scrollRef.current && layoutReady) {
       const lineInfo = wordToLineMap[highlightedWordIdx];
@@ -194,7 +177,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     }
   }, [highlightedWordIdx, mode, wordToLineMap, layoutReady]);
 
-  // ── 4. Strict Matching Algorithm ───────────────────────────────────────
   function matchWords(spokenWords, startPointer, allowRevert) {
     const { normalizedWords, totalWords } = wordsData;
     let pointer = startPointer;
@@ -252,7 +234,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     }
   }, [wordsData]);
 
-  // ── 5. High-Speed Text Slicer ──────────────────────────────────────────
   const { spokenText, currentText, upcomingText } = useMemo(() => {
     let spoken = '';
     let current = '';
@@ -278,7 +259,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     return { spokenText: spoken, currentText: current, upcomingText: upcoming };
   }, [wordsData, highlightedWordIdx]);
 
-  // ── Language pack checks ───────────────────────────────────────────────
   useEffect(() => {
     if (mode !== 'voice') {
       setLangPackState('idle');
@@ -317,7 +297,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     }
   }
 
-  // ── Speech listeners ───────────────────────────────────────────────────
   useEffect(() => {
     const unsubStart  = SpeechRecognition.addListener('start',  () => setRecognizing(true));
     const unsubEnd    = SpeechRecognition.addListener('end',    () => setRecognizing(false));
@@ -353,7 +332,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     SpeechRecognition.stop().catch(() => {});
   }
 
-  // ── Scroll loop (For Manual Scroll Mode) ────────────────────────────────
   const startScrollLoop = useCallback(() => {
     function animate(timestamp) {
       if (lastTimeRef.current === null) lastTimeRef.current = timestamp;
@@ -366,7 +344,7 @@ export default function TeleprompterScreen({ navigation, route }) {
         scrollY.current = maxScroll;
         setPlayState('finished');
         return;
-      }
+    }
       scrollRef.current?.scrollTo({ y: scrollY.current, animated: false });
       animFrameRef.current = requestAnimationFrame(animate);
     }
@@ -560,12 +538,12 @@ export default function TeleprompterScreen({ navigation, route }) {
 
       <View style={[styles.cameraSection, { height: cameraHeight, backgroundColor: '#000' }]}>
         
-        {/* Camera stays permanently at 100% opacity so the hardware surface doesn't crash/flicker */}
-        <CameraView
+        <SmartCamera
           height={cameraHeight}
           cameraPosition={cameraPosition}
           isRecording={isRecording}
           audioEnabled={true}
+          backgroundSource={BACKGROUNDS[activeBgIndex].source}
           onRecordingStart={() => { recordingStartTimeRef.current = Date.now(); }}
           onRecordingStop={async (video) => {
             setIsRecording(false);
@@ -579,7 +557,15 @@ export default function TeleprompterScreen({ navigation, route }) {
           }}
         />
 
-        {/* Timer overlay WITH the 60% black dimming background built-in */}
+        {/* ── NEW: Short 'Change Background' button here ── */}
+        <TouchableOpacity 
+          style={styles.changeBgBtn} 
+          onPress={() => setShowBgPicker(!showBgPicker)}
+        >
+          <Icon name="image" size={20} color="#FFF" />
+          <Text style={styles.changeBgText}>Change Background</Text>
+        </TouchableOpacity>
+
         {playState === 'counting_down' && countdown > 0 && (
           <View style={styles.countdownCameraOverlay}>
             <Text style={styles.countdownTextGiant}>{countdown}</Text>
@@ -593,7 +579,6 @@ export default function TeleprompterScreen({ navigation, route }) {
 
       <View style={styles.prompterSection}>
         
-        {/* PASS 1: The Ghost Render */}
         {!layoutReady && (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.prompterContent}>
              <Text 
@@ -605,7 +590,6 @@ export default function TeleprompterScreen({ navigation, route }) {
           </ScrollView>
         )}
 
-        {/* PASS 2: The Real UI */}
         {layoutReady && (
           <ScrollView
             ref={scrollRef}
@@ -643,8 +627,30 @@ export default function TeleprompterScreen({ navigation, route }) {
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.scriptTitle} numberOfLines={1}>{script.title}</Text>
+          {/* Removed the top floating button, placeholder to keep title centered */}
           <View style={{ width: 40 }} />
         </View>
+
+        {/* ── BACKGROUND PICKER MENU ── */}
+        {showBgPicker && (
+          <View style={styles.bgPickerContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
+              {BACKGROUNDS.map((bg, index) => (
+                <TouchableOpacity
+                  key={bg.id}
+                  style={[styles.bgOption, activeBgIndex === index && styles.bgOptionActive]}
+                  onPress={() => { setActiveBgIndex(index); setShowBgPicker(false); }}
+                >
+                  <View style={styles.bgThumbnailContainer}>
+                    {bg.source ? <Image source={bg.source} style={styles.bgThumbnail} /> : 
+                      <View style={styles.bgThumbnailPlaceholder}><Icon name="replay" size={20} color="#666" /></View>}
+                  </View>
+                  <Text style={styles.bgOptionText}>{bg.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 14 }]}>
           <View style={styles.modeToggle}>
@@ -685,6 +691,9 @@ export default function TeleprompterScreen({ navigation, route }) {
           </View>
 
           <View style={styles.playbackRow}>
+            {/* Kept placeholder or you could place another icon here if needed */}
+            <View style={styles.sideBtnPlaceholder} />
+
             <TouchableOpacity style={styles.sideBtn} onPress={handleReset}>
               <Icon name="replay" size={26} color="#FFFFFF" />
             </TouchableOpacity>
@@ -706,6 +715,8 @@ export default function TeleprompterScreen({ navigation, route }) {
             <TouchableOpacity style={styles.sideBtn} onPress={handleFlipCamera}>
               <Icon name="flip-camera" size={26} color="#FFFFFF" />
             </TouchableOpacity>
+            
+            <View style={styles.sideBtnPlaceholder} />
           </View>
         </View>
       </View>
@@ -743,6 +754,27 @@ const styles = StyleSheet.create({
   backLink: { color: Theme.colors.primary, fontFamily: Theme.fonts.medium, fontSize: 16 },
 
   cameraSection: { overflow: 'hidden', backgroundColor: '#000' },
+  
+  // ── STYLE FOR THE NEW BUTTON HERE ──
+  changeBgBtn: {
+    position: 'absolute',
+    bottom: 12, // Positioned at the bottom of the camera section
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.colors.primary, // Purple color
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    zIndex: 10, // Ensure it's above the camera view
+  },
+  changeBgText: {
+    color: '#FFFFFF',
+    fontFamily: Theme.fonts.medium,
+    fontSize: 14,
+    marginLeft: 8,
+  },
+
   divider: {
     height: 28, backgroundColor: Theme.colors.primary,
     justifyContent: 'center', alignItems: 'center',
@@ -879,5 +911,43 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: Theme.colors.primary,
     alignItems: 'center', justifyContent: 'center',
+  },
+  sideBtnPlaceholder: {
+    width: 52, height: 52,
+  },
+
+  bgPickerContainer: {
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingVertical: 15,
+  },
+  bgOption: {
+    alignItems: 'center',
+    opacity: 0.5,
+  },
+  bgOptionActive: {
+    opacity: 1,
+  },
+  bgThumbnailContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  bgThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  bgThumbnailPlaceholder: {
+    flex: 1,
+    backgroundColor: '#222',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bgOptionText: {
+    color: '#FFF',
+    fontSize: 10,
+    marginTop: 4,
   },
 });
