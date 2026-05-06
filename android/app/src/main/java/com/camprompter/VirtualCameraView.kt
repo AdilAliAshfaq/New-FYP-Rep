@@ -37,9 +37,12 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var cameraPosition: Int = CameraSelector.LENS_FACING_FRONT
     private var currentBackgroundSource: String? = null
+<<<<<<< HEAD
     
     private var isRecording: Boolean = false
     private var isCameraStarted: Boolean = false
+=======
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
 
     // Initialize the AI Segmenter
     private val segmenter = SubjectSegmentation.getClient(
@@ -61,6 +64,7 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
         foregroundView.scaleType = ImageView.ScaleType.CENTER_CROP
         foregroundView.visibility = View.GONE
         addView(foregroundView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+<<<<<<< HEAD
     }
 
     // ── THE FIX: Wait until the screen is fully loaded before starting the camera ──
@@ -82,6 +86,13 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
         isCameraStarted = false
     }
 
+=======
+        
+        startCamera()
+    }
+
+    // ── THE REACT NATIVE LAYOUT BUG FIX ──
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
     private val measureAndLayout = Runnable {
         measure(
             MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
@@ -101,9 +112,13 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
         } else {
             CameraSelector.LENS_FACING_FRONT
         }
+<<<<<<< HEAD
         if (isCameraStarted) {
             startCamera()
         }
+=======
+        startCamera()
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
     }
 
     fun setBackgroundSource(source: String?) {
@@ -141,10 +156,13 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
         }
     }
 
+<<<<<<< HEAD
     fun setIsRecording(recording: Boolean) {
         this.isRecording = recording
     }
 
+=======
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
     @SuppressLint("UnsafeOptInUsageError")
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -178,7 +196,10 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
                     cameraProvider.bindToLifecycle(
                         lifecycleOwner, cameraSelector, preview, imageAnalyzer
                     )
+<<<<<<< HEAD
                     isCameraStarted = true
+=======
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
                 }
             } catch (exc: Exception) {
                 exc.printStackTrace()
@@ -188,11 +209,14 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
 
     @SuppressLint("UnsafeOptInUsageError")
     private fun processImageProxy(imageProxy: ImageProxy) {
+<<<<<<< HEAD
         if (currentBackgroundSource == null || currentBackgroundSource == "") {
             imageProxy.close()
             return
         }
 
+=======
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
@@ -202,16 +226,32 @@ class VirtualCameraView(context: ThemedReactContext) : FrameLayout(context) {
                 .addOnSuccessListener { result ->
                     val fgBitmap = result.foregroundBitmap
                     
+<<<<<<< HEAD
                     if (fgBitmap != null) {
                         val matrix = Matrix()
                         
+=======
+                    if (fgBitmap != null && currentBackgroundSource != null) {
+                        val matrix = Matrix()
+                        
+                        // 1. Flip horizontally like a mirror (for front camera)
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
                         if (cameraPosition == CameraSelector.LENS_FACING_FRONT) {
                             matrix.postScale(-1f, 1f)
                         }
                         
+<<<<<<< HEAD
                         val finalRotation = (rotationDegrees + 180) % 360
                         matrix.postRotate(finalRotation.toFloat())
 
+=======
+                        // 2. THE UPSIDE DOWN FIX: 
+                        // Add 180 degrees to the sensor's rotation to flip you upright
+                        val finalRotation = (rotationDegrees + 180) % 360
+                        matrix.postRotate(finalRotation.toFloat())
+
+                        // 3. Create the corrected bitmap
+>>>>>>> cfdc119ce9bd5a79c2f7ad4c0824a3d9913b9b69
                         val correctedBitmap = Bitmap.createBitmap(
                             fgBitmap, 0, 0, fgBitmap.width, fgBitmap.height, matrix, true
                         )
