@@ -12,34 +12,31 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 class MainActivity : ReactActivity() {
 
-  /**
-   * Returns the name of the main component registered from JavaScript. This is used to schedule
-   * rendering of the component.
-   */
   override fun getMainComponentName(): String = "CamPrompter"
 
-  /**
-   * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]
-   * which allows you to enable New Architecture with a single boolean flags [fabricEnabled]
-   */
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
 
   /**
-   * Pre-request RECORD_AUDIO at app launch so the WebView's Web Speech API
-   * has microphone access when Voice Track mode is used.
+   * Pre-request RECORD_AUDIO and CAMERA at app launch so the WebView's Web Speech API
+   * and the ML Kit Virtual Camera have necessary access immediately.
    */
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
-    if (ContextCompat.checkSelfPermission(
-          this,
-          Manifest.permission.RECORD_AUDIO
-        ) != PackageManager.PERMISSION_GRANTED
-    ) {
+    val audioPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+    val cameraPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+
+    // If either permission is missing, request both
+    if (audioPermission != PackageManager.PERMISSION_GRANTED || 
+        cameraPermission != PackageManager.PERMISSION_GRANTED) {
+      
       ActivityCompat.requestPermissions(
         this,
-        arrayOf(Manifest.permission.RECORD_AUDIO),
+        arrayOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA // Added Camera Permission
+        ),
         1001
       )
     }

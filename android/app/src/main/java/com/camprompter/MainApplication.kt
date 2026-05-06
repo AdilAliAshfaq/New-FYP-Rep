@@ -15,8 +15,9 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(SpeechPackage())
-          // Packages that cannot be autolinked yet can be added manually here, for example:
-          // add(MyReactNativePackage())
+          
+          // Link your custom AI camera here
+          add(SmartCameraPackage())
         },
     )
   }

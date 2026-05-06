@@ -1,26 +1,24 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Dimensions,
-  StatusBar,
-  ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  Dimensions, StatusBar, ActivityIndicator, Image, Alert
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScripts } from '../context/ScriptContext';
-import CameraView from '../components/CameraView';
+import SmartCamera from '../components/SmartCamera'; 
+import CameraView from '../components/CameraView'; 
 import Icon from '../components/Icon';
-import {
-  useCameraPermission,
-  useMicrophonePermission,
-} from 'react-native-vision-camera';
+import { useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 import { Theme } from '../theme/Theme';
 import SpeechRecognition from '../modules/SpeechRecognition';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const BACKGROUNDS = [
+  { id: 'none', label: 'Real BG', source: null },
+  { id: 'office1', label: 'Office 1', source: require('../assets/backgrounds/office1.jpg') },
+  { id: 'office2', label: 'Office 2', source: require('../assets/backgrounds/office2.jpg') },
+];
 
 const LOCALE_MAP = {
   en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', it: 'it-IT',
@@ -35,16 +33,10 @@ function toLocale(langCode) {
 }
 
 const PROMPTER_BG = '#1A1A2E';
-
 const TIMER_OPTIONS = [0, 3, 5, 7, 10]; 
 
-function normalizeWord(w) {
-  return w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '').trim();
-}
-
-function tokenize(text) {
-  return text.split(/\s+/).map(normalizeWord).filter(Boolean);
-}
+function normalizeWord(w) { return w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '').trim(); }
+function tokenize(text) { return text.split(/\s+/).map(normalizeWord).filter(Boolean); }
 
 export default function TeleprompterScreen({ navigation, route }) {
   const { getScript, settings, updateSettings, addRecording } = useScripts();
@@ -55,13 +47,21 @@ export default function TeleprompterScreen({ navigation, route }) {
   const [playState, setPlayState] = useState('idle'); 
   const [isRecording, setIsRecording] = useState(false);
   const [cameraPosition, setCameraPosition] = useState(settings.cameraPosition);
-  const [recognizing, setRecognizing] = useState(false);
   
-  // ── Global Timer State ──
+  // Voice Track States
+  const [recognizing, setRecognizing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  
+  // Background Replacement States
+  const [activeBgIndex, setActiveBgIndex] = useState(0);
+  const [showBgPicker, setShowBgPicker] = useState(false);
+
+  // Hardware handoff state to prevent black screen
+  const [isCameraSwitching, setIsCameraSwitching] = useState(false);
+
   const currentTimer = settings.countdownTimer !== undefined ? settings.countdownTimer : 3;
   const [countdown, setCountdown] = useState(0);
 
-  // ── Layout & Tracking State ──
   const [layoutReady, setLayoutReady] = useState(false);
   const [wordToLineMap, setWordToLineMap] = useState([]); 
   const currentLineIdxRef = useRef(-1);
@@ -70,14 +70,8 @@ export default function TeleprompterScreen({ navigation, route }) {
   const [langPackState, setLangPackState] = useState('idle');
   const [langPackInfo, setLangPackInfo] = useState(null);
 
-  const {
-    hasPermission: hasCameraPermission,
-    requestPermission: requestCameraPermission,
-  } = useCameraPermission();
-  const {
-    hasPermission: hasMicPermission,
-    requestPermission: requestMicrophonePermission,
-  } = useMicrophonePermission();
+  const { hasPermission: hasCameraPermission, requestPermission: requestCameraPermission } = useCameraPermission();
+  const { hasPermission: hasMicPermission, requestPermission: requestMicrophonePermission } = useMicrophonePermission();
   const hasAllPermissions = hasCameraPermission && hasMicPermission;
 
   useEffect(() => {
@@ -109,13 +103,22 @@ export default function TeleprompterScreen({ navigation, route }) {
   const isRTL = script ? ['ar', 'ur'].includes(script.language) : false;
   const scriptLocale = toLocale(script?.language);
 
+  useEffect(() => {
+    return () => {
+      nativeStartedRef.current = false;
+      SpeechRecognition.stop().catch(() => {});
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+    };
+  }, []);
+
   function cycleTimer() {
     const idx = TIMER_OPTIONS.indexOf(currentTimer);
     const nextIdx = (idx + 1) % TIMER_OPTIONS.length;
     updateSettings({ countdownTimer: TIMER_OPTIONS[nextIdx] });
   }
 
-  // ── Countdown Timer Logic ──
   useEffect(() => {
     if (playState === 'counting_down' && countdown > 0) {
       const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
@@ -137,7 +140,23 @@ export default function TeleprompterScreen({ navigation, route }) {
     setPlayState('playing');
   }
 
-  // ── 1. Create Logical Array for Strict Matching ──────────────────────
+  // Safe Background Switching Logic
+  function handleBgChange(index) {
+    if (index === activeBgIndex) {
+      setShowBgPicker(false);
+      return;
+    }
+    setShowBgPicker(false);
+    setIsCameraSwitching(true); 
+    
+    setTimeout(() => {
+      setActiveBgIndex(index);
+      setTimeout(() => {
+        setIsCameraSwitching(false); 
+      }, 400); // 400ms lets Android clear the lens before mounting the new camera
+    }, 50);
+  }
+
   const wordsData = useMemo(() => {
     if (!script) return { items: [], totalWords: 0, normalizedWords: [] };
     const raw = script.content.split(/(\s+)/);
@@ -164,7 +183,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     currentLineIdxRef.current = -1;
   }, [script?.content, settings.fontSize, settings.textAlign, settings.mirrorText]);
 
-  // ── 2. The Bulletproof Layout Measurer ───────────────────────────────
   const handleTextLayout = useCallback((e) => {
     if (layoutReady) return;
     const lines = e.nativeEvent.lines;
@@ -182,7 +200,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     setLayoutReady(true);
   }, [layoutReady]);
 
-  // ── 3. Strict Top-Line Snapping ──────────────────────────────────────
   useEffect(() => {
     if (mode === 'voice' && highlightedWordIdx >= 0 && scrollRef.current && layoutReady) {
       const lineInfo = wordToLineMap[highlightedWordIdx];
@@ -194,7 +211,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     }
   }, [highlightedWordIdx, mode, wordToLineMap, layoutReady]);
 
-  // ── 4. Strict Matching Algorithm ───────────────────────────────────────
   function matchWords(spokenWords, startPointer, allowRevert) {
     const { normalizedWords, totalWords } = wordsData;
     let pointer = startPointer;
@@ -252,7 +268,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     }
   }, [wordsData]);
 
-  // ── 5. High-Speed Text Slicer ──────────────────────────────────────────
   const { spokenText, currentText, upcomingText } = useMemo(() => {
     let spoken = '';
     let current = '';
@@ -278,7 +293,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     return { spokenText: spoken, currentText: current, upcomingText: upcoming };
   }, [wordsData, highlightedWordIdx]);
 
-  // ── Language pack checks ───────────────────────────────────────────────
   useEffect(() => {
     if (mode !== 'voice') {
       setLangPackState('idle');
@@ -317,10 +331,12 @@ export default function TeleprompterScreen({ navigation, route }) {
     }
   }
 
-  // ── Speech listeners ───────────────────────────────────────────────────
   useEffect(() => {
-    const unsubStart  = SpeechRecognition.addListener('start',  () => setRecognizing(true));
-    const unsubEnd    = SpeechRecognition.addListener('end',    () => setRecognizing(false));
+    const unsubStart      = SpeechRecognition.addListener('start',         () => setRecognizing(true));
+    const unsubEnd        = SpeechRecognition.addListener('end',           () => setRecognizing(false));
+    const unsubSpeakStart = SpeechRecognition.addListener('speakingStart', () => setIsSpeaking(true));
+    const unsubSpeakEnd   = SpeechRecognition.addListener('speakingEnd',   () => setIsSpeaking(false));
+    
     const unsubResult = SpeechRecognition.addListener('result', ev  => {
       if (!ev?.transcript) return;
       if (ev.isFinal) {
@@ -333,7 +349,13 @@ export default function TeleprompterScreen({ navigation, route }) {
         applyMatch(ev.transcript, false);
       }
     });
-    return () => { unsubStart(); unsubEnd(); unsubResult(); };
+    return () => { 
+      unsubStart(); 
+      unsubEnd(); 
+      unsubSpeakStart(); 
+      unsubSpeakEnd(); 
+      unsubResult(); 
+    };
   }, [applyMatch]);
 
   async function startRecognition() {
@@ -342,10 +364,8 @@ export default function TeleprompterScreen({ navigation, route }) {
     try {
       await SpeechRecognition.start({ 
         lang: scriptLocale, 
-        onDevice: true,
-        playSound: isInitialPlayRef.current 
+        onDevice: true 
       });
-      isInitialPlayRef.current = false; 
     } catch (err) {}
   }
 
@@ -353,7 +373,6 @@ export default function TeleprompterScreen({ navigation, route }) {
     SpeechRecognition.stop().catch(() => {});
   }
 
-  // ── Scroll loop (For Manual Scroll Mode) ────────────────────────────────
   const startScrollLoop = useCallback(() => {
     function animate(timestamp) {
       if (lastTimeRef.current === null) lastTimeRef.current = timestamp;
@@ -406,13 +425,25 @@ export default function TeleprompterScreen({ navigation, route }) {
     totalSpokenLockedRef.current = 0;
     currentLineIdxRef.current = -1;
     setHighlightedWordIdx(-1);
+    setIsSpeaking(false);
   }
 
   function safeStopRecording() {
     if (!isRecording) return;
     const elapsed = Date.now() - (recordingStartTimeRef.current ?? 0);
     const delay = Math.max(0, MIN_RECORDING_MS - elapsed);
-    setTimeout(() => setIsRecording(false), delay);
+    setTimeout(() => {
+      setIsRecording(false);
+      if (activeBgIndex !== 0) {
+        Alert.alert(
+          "AI Recording Not Saved", 
+          "Recording the virtual background requires a screen-capture plugin. Only 'Real BG' saves MP4s to the dashboard right now."
+        );
+      } else {
+        // ── RESTORED ORIGINAL MESSAGE ──
+        Alert.alert("Success", "Video saved to Recordings!");
+      }
+    }, delay);
   }
 
   function handleMainButton() {
@@ -560,26 +591,47 @@ export default function TeleprompterScreen({ navigation, route }) {
 
       <View style={[styles.cameraSection, { height: cameraHeight, backgroundColor: '#000' }]}>
         
-        {/* Camera stays permanently at 100% opacity so the hardware surface doesn't crash/flicker */}
-        <CameraView
-          height={cameraHeight}
-          cameraPosition={cameraPosition}
-          isRecording={isRecording}
-          audioEnabled={true}
-          onRecordingStart={() => { recordingStartTimeRef.current = Date.now(); }}
-          onRecordingStop={async (video) => {
-            setIsRecording(false);
-            if (video) {
-              await addRecording({
-                path: video.path,
-                duration: video.duration ?? 0,
-                scriptTitle: script.title,
-              });
-            }
-          }}
-        />
+        {isCameraSwitching ? (
+          <View style={styles.cameraLoadingOverlay}>
+             <ActivityIndicator size="large" color={Theme.colors.primary} />
+          </View>
+        ) : (
+          activeBgIndex === 0 ? (
+            <CameraView
+              height={cameraHeight}
+              cameraPosition={cameraPosition}
+              isRecording={isRecording}
+              audioEnabled={true}
+              onRecordingStart={() => { recordingStartTimeRef.current = Date.now(); }}
+              onRecordingStop={async (video) => {
+                setIsRecording(false);
+                if (video && video.path) {
+                  await addRecording({
+                    path: video.path,
+                    duration: video.duration ?? 0,
+                    scriptTitle: script.title,
+                  });
+                }
+              }}
+            />
+          ) : (
+            <SmartCamera
+              height={cameraHeight}
+              cameraPosition={cameraPosition}
+              isRecording={isRecording}
+              audioEnabled={true}
+              backgroundSource={BACKGROUNDS[activeBgIndex].source}
+            />
+          )
+        )}
 
-        {/* Timer overlay WITH the 60% black dimming background built-in */}
+        <TouchableOpacity 
+          style={styles.floatingBgBtn} 
+          onPress={() => setShowBgPicker(!showBgPicker)}
+        >
+          <Icon name="background" size={26} color="#FFFFFF" />
+        </TouchableOpacity>
+
         {playState === 'counting_down' && countdown > 0 && (
           <View style={styles.countdownCameraOverlay}>
             <Text style={styles.countdownTextGiant}>{countdown}</Text>
@@ -593,7 +645,15 @@ export default function TeleprompterScreen({ navigation, route }) {
 
       <View style={styles.prompterSection}>
         
-        {/* PASS 1: The Ghost Render */}
+        {mode === 'voice' && playState === 'playing' && (
+          <View style={styles.voiceStatusIndicator}>
+            <View style={[
+              styles.voiceStatusDot, 
+              { backgroundColor: isSpeaking ? Theme.colors.success : Theme.colors.error }
+            ]} />
+          </View>
+        )}
+
         {!layoutReady && (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.prompterContent}>
              <Text 
@@ -605,7 +665,6 @@ export default function TeleprompterScreen({ navigation, route }) {
           </ScrollView>
         )}
 
-        {/* PASS 2: The Real UI */}
         {layoutReady && (
           <ScrollView
             ref={scrollRef}
@@ -639,12 +698,35 @@ export default function TeleprompterScreen({ navigation, route }) {
 
       <View style={styles.controlsOverlay} pointerEvents="box-none">
         <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-          <TouchableOpacity style={styles.closeBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity style={styles.closeBtn} onPress={() => {
+            handleReset();
+            navigation.goBack();
+          }}>
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.scriptTitle} numberOfLines={1}>{script.title}</Text>
           <View style={{ width: 40 }} />
         </View>
+
+        {showBgPicker && (
+          <View style={styles.bgPickerContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
+              {BACKGROUNDS.map((bg, index) => (
+                <TouchableOpacity
+                  key={bg.id}
+                  style={[styles.bgOption, activeBgIndex === index && styles.bgOptionActive]}
+                  onPress={() => handleBgChange(index)}
+                >
+                  <View style={styles.bgThumbnailContainer}>
+                    {bg.source ? <Image source={bg.source} style={styles.bgThumbnail} /> : 
+                      <View style={styles.bgThumbnailPlaceholder}><Icon name="replay" size={20} color="#666" /></View>}
+                  </View>
+                  <Text style={styles.bgOptionText}>{bg.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 14 }]}>
           <View style={styles.modeToggle}>
@@ -685,6 +767,8 @@ export default function TeleprompterScreen({ navigation, route }) {
           </View>
 
           <View style={styles.playbackRow}>
+            <View style={styles.sideBtnPlaceholder} />
+
             <TouchableOpacity style={styles.sideBtn} onPress={handleReset}>
               <Icon name="replay" size={26} color="#FFFFFF" />
             </TouchableOpacity>
@@ -706,9 +790,12 @@ export default function TeleprompterScreen({ navigation, route }) {
             <TouchableOpacity style={styles.sideBtn} onPress={handleFlipCamera}>
               <Icon name="flip-camera" size={26} color="#FFFFFF" />
             </TouchableOpacity>
+            
+            <View style={styles.sideBtnPlaceholder} />
           </View>
         </View>
       </View>
+
     </View>
   );
 }
@@ -743,6 +830,29 @@ const styles = StyleSheet.create({
   backLink: { color: Theme.colors.primary, fontFamily: Theme.fonts.medium, fontSize: 16 },
 
   cameraSection: { overflow: 'hidden', backgroundColor: '#000' },
+  
+  cameraLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  
+  floatingBgBtn: {
+    position: 'absolute',
+    bottom: 16,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 24,
+    zIndex: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+
   divider: {
     height: 28, backgroundColor: Theme.colors.primary,
     justifyContent: 'center', alignItems: 'center',
@@ -753,6 +863,21 @@ const styles = StyleSheet.create({
 
   prompterSection: { flex: 1, overflow: 'hidden', backgroundColor: PROMPTER_BG },
   prompterContent: { paddingHorizontal: 28, paddingTop: 20 }, 
+  
+  voiceStatusIndicator: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    zIndex: 50,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    padding: 6,
+    borderRadius: 20,
+  },
+  voiceStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
 
   countdownCameraOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -879,5 +1004,43 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: Theme.colors.primary,
     alignItems: 'center', justifyContent: 'center',
+  },
+  sideBtnPlaceholder: {
+    width: 52, height: 52,
+  },
+
+  bgPickerContainer: {
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingVertical: 15,
+  },
+  bgOption: {
+    alignItems: 'center',
+    opacity: 0.5,
+  },
+  bgOptionActive: {
+    opacity: 1,
+  },
+  bgThumbnailContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  bgThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  bgThumbnailPlaceholder: {
+    flex: 1,
+    backgroundColor: '#222',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bgOptionText: {
+    color: '#FFF',
+    fontSize: 10,
+    marginTop: 4,
   },
 });

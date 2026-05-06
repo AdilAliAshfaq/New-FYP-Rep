@@ -23,7 +23,6 @@ export async function requestMicPermission() {
     );
     return result === PermissionsAndroid.RESULTS.GRANTED;
   } catch (e) {
-    console.warn('[SpeechRecognition] permission error:', e);
     return false;
   }
 }
@@ -37,11 +36,6 @@ export async function isOnDeviceSupported() {
   }
 }
 
-/**
- * Check whether the on-device language pack is installed for a given locale.
- * @param {string} locale  e.g. 'en-US'
- * @returns {Promise<{ status: 'installed' | 'available-to-download' | 'unsupported', locale: string, reason?: string }>}
- */
 export async function checkLanguagePack(locale = 'en-US') {
   if (!SpeechModule) return { status: 'unsupported', locale, reason: 'module not registered' };
   try {
@@ -51,12 +45,6 @@ export async function checkLanguagePack(locale = 'en-US') {
   }
 }
 
-/**
- * Trigger the system download of the on-device language pack.
- * Shows a system dialog to the user.
- * @param {string} locale  e.g. 'en-US'
- * @returns {Promise<{ status: 'downloaded' | 'scheduled' | 'failed', locale: string, reason?: string }>}
- */
 export async function downloadLanguagePack(locale = 'en-US') {
   if (!SpeechModule) throw new Error('Native module not registered');
   return await SpeechModule.downloadLanguagePack(locale);
@@ -66,7 +54,7 @@ export function start(options = {}) {
   if (!SpeechModule) return Promise.reject(new Error('Native module not registered'));
   return SpeechModule.start({
     lang: options.lang || 'en-US',
-    onDevice: options.onDevice !== false, // default true
+    onDevice: options.onDevice !== false,
   });
 }
 
@@ -77,13 +65,18 @@ export function stop() {
 
 export function addListener(event, handler) {
   if (!emitter) return () => {};
+  
+  // ── THE FIX: Added speakingStart and speakingEnd events ──
   const nativeEventName = {
     start: 'onSpeechStart',
     result: 'onSpeechResult',
     error: 'onSpeechError',
     end: 'onSpeechEnd',
     log: 'onSpeechLog',
+    speakingStart: 'onSpeechStartSpeaking', 
+    speakingEnd: 'onSpeechStopSpeaking',    
   }[event];
+  
   if (!nativeEventName) throw new Error(`Unknown event: ${event}`);
   const sub = emitter.addListener(nativeEventName, handler);
   return () => sub.remove();

@@ -7,8 +7,8 @@ import SettingsIcon from '../assets/icons/settings-fill.svg';
 import PlayIcon from '../assets/icons/play-fill.svg';
 import PauseIcon from '../assets/icons/pause-fill.svg';
 import FlipCameraIcon from '../assets/icons/baseline-flip-camera-android.svg';
-import ShareIcon from '../assets/icons/share.svg'; // <-- NEW SHARE ICON
-
+import ShareIcon from '../assets/icons/share.svg'; 
+import BackgroundIcon from '../assets/icons/background.svg'; // ── NEW ICON IMPORT ──
 
 // Map simple string names to the imported SVG components
 const ICONS = {
@@ -17,7 +17,8 @@ const ICONS = {
   'play': PlayIcon,
   'pause': PauseIcon, 
   'flip-camera': FlipCameraIcon,
-  'share': ShareIcon, // <-- ADDED TO MAP
+  'share': ShareIcon,
+  'background': BackgroundIcon, // ── ADDED TO MAP ──
 };
 
 export default function Icon({ name, size = 24, color = '#000000', style }) {
